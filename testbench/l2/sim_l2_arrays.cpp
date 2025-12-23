@@ -1,0 +1,28 @@
+#include <verilated.h>
+#include <verilated_vcd_c.h>
+#include "Vcpu64_l2_arrays_tb.h"
+
+static vluint64_t sim_time = 0;
+
+int main(int argc, char** argv) {
+    Verilated::commandArgs(argc, argv);
+    Vcpu64_l2_arrays_tb* top = new Vcpu64_l2_arrays_tb;
+
+    Verilated::traceEverOn(true);
+    VerilatedVcdC* tfp = new VerilatedVcdC;
+    top->trace(tfp, 99);
+    tfp->open("obj_dir/wave_l2_arrays.vcd");
+
+    while (!Verilated::gotFinish() && sim_time < 2000) {
+        top->clk = (sim_time & 1) ? 1 : 0;
+        top->rst_n = (sim_time >= 10) ? 1 : 0;
+        
+        top->eval();
+        tfp->dump(sim_time);
+        sim_time += 1;
+    }
+
+    tfp->close();
+    delete top;
+    return 0;
+}
