@@ -10,7 +10,7 @@ int main(int argc, char** argv) {
     Vcpu64_system_tb* top = new Vcpu64_system_tb{contextp};
     VerilatedVcdC* tfp = new VerilatedVcdC;
     top->trace(tfp, 99);
-    tfp->open("wave_system.vcd");
+    tfp->open("obj_dir/wave_system.vcd");
 
     while (!contextp->gotFinish()) {
         top->eval();

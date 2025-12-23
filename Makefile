@@ -222,10 +222,11 @@ run_system: build_system
 
 # System Stress Test
 SYSTEM_STRESS_TB := $(SYSTEM_TB_DIR)/cpu64_system_stress_tb.v
+SYSTEM_STIMULUS := $(SYSTEM_TB_DIR)/stimulus.v
 SYSTEM_STRESS_CPP := $(SYSTEM_TB_DIR)/sim_system_stress.cpp
 
 verilate_system_stress: clean_verilator
-	$(VERILATOR) $(VERILATOR_FLAGS) $(SYSTEM_STRESS_CPP) $(SYSTEM_STRESS_TB) $(SYSTEM_RTL) $(L1_PARAMS)
+	$(VERILATOR) $(VERILATOR_FLAGS) $(SYSTEM_STRESS_CPP) $(SYSTEM_STRESS_TB) $(SYSTEM_STIMULUS) $(SYSTEM_RTL) $(L1_PARAMS)
 
 build_system_stress: verilate_system_stress
 	$(MAKE) -C obj_dir -f Vcpu64_system_stress_tb.mk Vcpu64_system_stress_tb

@@ -10,7 +10,7 @@ int main(int argc, char** argv) {
     Vcpu64_system_stress_tb* top = new Vcpu64_system_stress_tb{contextp};
     VerilatedVcdC* tfp = new VerilatedVcdC;
     top->trace(tfp, 99);
-    tfp->open("wave_stress.vcd");
+    tfp->open("obj_dir/wave_stress.vcd");
 
     while (!contextp->gotFinish()) {
         top->eval();
