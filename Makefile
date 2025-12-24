@@ -7,14 +7,14 @@ TB_DIR = testbench
 
 # Verilator unit test for L1 D-cache
 L1_TB_DIR := $(TB_DIR)/l1
-L1_TB := $(L1_TB_DIR)/cpu64_l1_dcache_tb.v
-L1_MEM_MODEL := $(L1_TB_DIR)/cpu64_l1_mem_model.v
+L1_TB := $(L1_TB_DIR)/rv64g_l1_dcache_tb.v
+L1_MEM_MODEL := $(L1_TB_DIR)/rv64g_l1_mem_model.v
 L1_CPP := $(L1_TB_DIR)/sim_main.cpp
 L1_PARAMS := $(RTL_DIR)/params.vh
 L1_RTL := \
-	$(RTL_DIR)/l1/cpu64_l1_dcache.v \
-	$(RTL_DIR)/l1/cpu64_l1_arrays.v \
-	$(RTL_DIR)/l1/cpu64_l1_plru.v
+	$(RTL_DIR)/l1/rv64g_l1_dcache.v \
+	$(RTL_DIR)/l1/rv64g_l1_arrays.v \
+	$(RTL_DIR)/l1/rv64g_l1_plru.v
 
 
 VERILATOR_FLAGS := -cc -exe -Wall -Wno-fatal -trace --timing -I$(RTL_DIR) $(DBG_DEFINE)
@@ -33,13 +33,13 @@ verilate_l1: clean_verilator
 	$(VERILATOR) $(VERILATOR_FLAGS) $(L1_CPP) $(L1_TB) $(L1_MEM_MODEL) $(L1_RTL) $(L1_PARAMS)
 
 build_l1: verilate_l1
-	$(MAKE) -C obj_dir -f Vcpu64_l1_dcache_tb.mk Vcpu64_l1_dcache_tb
+	$(MAKE) -C obj_dir -f Vrv64g_l1_dcache_tb.mk Vrv64g_l1_dcache_tb
 
 run_l1: build_l1
-	obj_dir/Vcpu64_l1_dcache_tb
+	obj_dir/Vrv64g_l1_dcache_tb
 
 # L1 Probe Cache Verilator targets
-L1_PROBE_TB := $(L1_TB_DIR)/cpu64_l1_probe_tb.v
+L1_PROBE_TB := $(L1_TB_DIR)/rv64g_l1_probe_tb.v
 L1_PROBE_CPP := $(L1_TB_DIR)/sim_probe.cpp
 
 lint_l1_probe:
@@ -105,9 +105,9 @@ run_socket: build_socket
 
 # L2 Directory Verilator targets
 L2_TB_DIR := $(TB_DIR)/l2
-L2_DIR_TB := $(L2_TB_DIR)/cpu64_l2_directory_tb.v
+L2_DIR_TB := $(L2_TB_DIR)/rv64g_l2_directory_tb.v
 L2_DIR_CPP := $(L2_TB_DIR)/sim_l2_directory.cpp
-L2_DIR_RTL := $(RTL_DIR)/l2/cpu64_l2_directory.v
+L2_DIR_RTL := $(RTL_DIR)/l2/rv64g_l2_directory.v
 
 lint_l2_dir:
 	$(VERILATOR) --lint-only -Wall -Wno-lint -I$(RTL_DIR) $(L2_DIR_RTL) $(L2_DIR_TB)
@@ -116,15 +116,15 @@ verilate_l2_dir: clean_verilator
 	$(VERILATOR) $(VERILATOR_FLAGS) $(L2_DIR_CPP) $(L2_DIR_TB) $(L2_DIR_RTL)
 
 build_l2_dir: verilate_l2_dir
-	$(MAKE) -C obj_dir -f Vcpu64_l2_directory_tb.mk Vcpu64_l2_directory_tb
+	$(MAKE) -C obj_dir -f Vrv64g_l2_directory_tb.mk Vrv64g_l2_directory_tb
 
 run_l2_dir: build_l2_dir
-	obj_dir/Vcpu64_l2_directory_tb
+	obj_dir/Vrv64g_l2_directory_tb
 
 # L2 Arrays Verilator targets
-L2_ARRAYS_TB := $(L2_TB_DIR)/cpu64_l2_arrays_tb.v
+L2_ARRAYS_TB := $(L2_TB_DIR)/rv64g_l2_arrays_tb.v
 L2_ARRAYS_CPP := $(L2_TB_DIR)/sim_l2_arrays.cpp
-L2_ARRAYS_RTL := $(RTL_DIR)/l2/cpu64_l2_arrays.v
+L2_ARRAYS_RTL := $(RTL_DIR)/l2/rv64g_l2_arrays.v
 
 lint_l2_arrays:
 	$(VERILATOR) --lint-only -Wall -Wno-lint -I$(RTL_DIR) $(L2_ARRAYS_RTL) $(L2_ARRAYS_TB)
@@ -133,15 +133,15 @@ verilate_l2_arrays: clean_verilator
 	$(VERILATOR) $(VERILATOR_FLAGS) $(L2_ARRAYS_CPP) $(L2_ARRAYS_TB) $(L2_ARRAYS_RTL)
 
 build_l2_arrays: verilate_l2_arrays
-	$(MAKE) -C obj_dir -f Vcpu64_l2_arrays_tb.mk Vcpu64_l2_arrays_tb
+	$(MAKE) -C obj_dir -f Vrv64g_l2_arrays_tb.mk Vrv64g_l2_arrays_tb
 
 run_l2_arrays: build_l2_arrays
-	obj_dir/Vcpu64_l2_arrays_tb
+	obj_dir/Vrv64g_l2_arrays_tb
 
 # L2 MSHR Verilator targets
-L2_MSHR_TB := $(L2_TB_DIR)/cpu64_l2_mshr_tb.v
+L2_MSHR_TB := $(L2_TB_DIR)/rv64g_l2_mshr_tb.v
 L2_MSHR_CPP := $(L2_TB_DIR)/sim_l2_mshr.cpp
-L2_MSHR_RTL := $(RTL_DIR)/l2/cpu64_l2_mshr.v
+L2_MSHR_RTL := $(RTL_DIR)/l2/rv64g_l2_mshr.v
 
 lint_l2_mshr:
 	$(VERILATOR) --lint-only -Wall -Wno-lint -I$(RTL_DIR) $(L2_MSHR_RTL) $(L2_MSHR_TB)
@@ -150,15 +150,15 @@ verilate_l2_mshr: clean_verilator
 	$(VERILATOR) $(VERILATOR_FLAGS) $(L2_MSHR_CPP) $(L2_MSHR_TB) $(L2_MSHR_RTL)
 
 build_l2_mshr: verilate_l2_mshr
-	$(MAKE) -C obj_dir -f Vcpu64_l2_mshr_tb.mk Vcpu64_l2_mshr_tb
+	$(MAKE) -C obj_dir -f Vrv64g_l2_mshr_tb.mk Vrv64g_l2_mshr_tb
 
 run_l2_mshr: build_l2_mshr
-	obj_dir/Vcpu64_l2_mshr_tb
+	obj_dir/Vrv64g_l2_mshr_tb
 
 # L2 FSM Verilator targets
-L2_FSM_TB := $(L2_TB_DIR)/cpu64_l2_fsm_tb.v
+L2_FSM_TB := $(L2_TB_DIR)/rv64g_l2_fsm_tb.v
 L2_FSM_CPP := $(L2_TB_DIR)/sim_l2_fsm.cpp
-L2_FSM_RTL := $(RTL_DIR)/l2/cpu64_l2_fsm.v $(RTL_DIR)/l2/cpu64_l2_plru.v
+L2_FSM_RTL := $(RTL_DIR)/l2/rv64g_l2_fsm.v $(RTL_DIR)/l2/rv64g_l2_plru.v
 
 lint_l2_fsm:
 	$(VERILATOR) --lint-only -Wall -Wno-lint -I$(RTL_DIR) $(L2_FSM_RTL) $(L2_FSM_TB)
@@ -167,16 +167,16 @@ verilate_l2_fsm: clean_verilator
 	$(VERILATOR) $(VERILATOR_FLAGS) --timing $(L2_FSM_CPP) $(L2_FSM_TB) $(L2_FSM_RTL)
 
 build_l2_fsm: verilate_l2_fsm
-	$(MAKE) -C obj_dir -f Vcpu64_l2_fsm_tb.mk Vcpu64_l2_fsm_tb
+	$(MAKE) -C obj_dir -f Vrv64g_l2_fsm_tb.mk Vrv64g_l2_fsm_tb
 
 run_l2_fsm: build_l2_fsm
-	obj_dir/Vcpu64_l2_fsm_tb
+	obj_dir/Vrv64g_l2_fsm_tb
 
 build_l1_probe: verilate_l1_probe
-	$(MAKE) -C obj_dir -f Vcpu64_l1_probe_tb.mk Vcpu64_l1_probe_tb
+	$(MAKE) -C obj_dir -f Vrv64g_l1_probe_tb.mk Vrv64g_l1_probe_tb
 
 run_l1_probe: build_l1_probe
-	obj_dir/Vcpu64_l1_probe_tb
+	obj_dir/Vrv64g_l1_probe_tb
 
 # Help
 help:
@@ -194,19 +194,19 @@ help:
 
 # System Verilator targets
 SYSTEM_TB_DIR := $(TB_DIR)/system
-SYSTEM_TB := $(SYSTEM_TB_DIR)/cpu64_system_tb.v
+SYSTEM_TB := $(SYSTEM_TB_DIR)/rv64g_system_tb.v
 SYSTEM_CPP := $(SYSTEM_TB_DIR)/sim_system.cpp
 SYSTEM_RTL := \
-$(RTL_DIR)/system/cpu64_system.v \
-$(RTL_DIR)/l1/cpu64_l1_dcache.v \
-$(RTL_DIR)/l1/cpu64_l1_arrays.v \
-$(RTL_DIR)/l1/cpu64_l1_plru.v \
-$(RTL_DIR)/l2/cpu64_l2_cache.v \
-$(RTL_DIR)/l2/cpu64_l2_fsm.v \
-$(RTL_DIR)/l2/cpu64_l2_directory.v \
-$(RTL_DIR)/l2/cpu64_l2_arrays.v \
-$(RTL_DIR)/l2/cpu64_l2_mshr.v \
-$(RTL_DIR)/l2/cpu64_l2_plru.v \
+$(RTL_DIR)/system/rv64g_system.v \
+$(RTL_DIR)/l1/rv64g_l1_dcache.v \
+$(RTL_DIR)/l1/rv64g_l1_arrays.v \
+$(RTL_DIR)/l1/rv64g_l1_plru.v \
+$(RTL_DIR)/l2/rv64g_l2_cache.v \
+$(RTL_DIR)/l2/rv64g_l2_fsm.v \
+$(RTL_DIR)/l2/rv64g_l2_directory.v \
+$(RTL_DIR)/l2/rv64g_l2_arrays.v \
+$(RTL_DIR)/l2/rv64g_l2_mshr.v \
+$(RTL_DIR)/l2/rv64g_l2_plru.v \
 $(RTL_DIR)/xbar/tl_socket_m1.v \
 $(RTL_DIR)/xbar/tl_arbiter.v \
 $(RTL_DIR)/xbar/tl_demux.v
@@ -215,13 +215,13 @@ verilate_system: clean_verilator
 	$(VERILATOR) $(VERILATOR_FLAGS) $(SYSTEM_CPP) $(SYSTEM_TB) $(SYSTEM_RTL) $(L1_PARAMS)
 
 build_system: verilate_system
-	$(MAKE) -C obj_dir -f Vcpu64_system_tb.mk Vcpu64_system_tb
+	$(MAKE) -C obj_dir -f Vrv64g_system_tb.mk Vrv64g_system_tb
 
 run_system: build_system
-	obj_dir/Vcpu64_system_tb
+	obj_dir/Vrv64g_system_tb
 
 # System Stress Test
-SYSTEM_STRESS_TB := $(SYSTEM_TB_DIR)/cpu64_system_stress_tb.v
+SYSTEM_STRESS_TB := $(SYSTEM_TB_DIR)/rv64g_system_stress_tb.v
 SYSTEM_STIMULUS := $(SYSTEM_TB_DIR)/stimulus.v
 SYSTEM_STRESS_CPP := $(SYSTEM_TB_DIR)/sim_system_stress.cpp
 
@@ -229,7 +229,7 @@ verilate_system_stress: clean_verilator
 	$(VERILATOR) $(VERILATOR_FLAGS) $(SYSTEM_STRESS_CPP) $(SYSTEM_STRESS_TB) $(SYSTEM_STIMULUS) $(SYSTEM_RTL) $(L1_PARAMS)
 
 build_system_stress: verilate_system_stress
-	$(MAKE) -C obj_dir -f Vcpu64_system_stress_tb.mk Vcpu64_system_stress_tb
+	$(MAKE) -C obj_dir -f Vrv64g_system_stress_tb.mk Vrv64g_system_stress_tb
 
 run_system_stress: build_system_stress
-	obj_dir/Vcpu64_system_stress_tb
+	obj_dir/Vrv64g_system_stress_tb

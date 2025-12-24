@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module cpu64_system #(
+module rv64g_system #(
     parameter CORES = 4,
     parameter ADDR_W = 64,
     parameter DATA_W = 64,
@@ -154,7 +154,7 @@ module cpu64_system #(
     genvar i;
     generate
         for (i = 0; i < CORES; i = i + 1) begin : gen_l1
-            cpu64_l1_dcache l1 (
+            rv64g_l1_dcache l1 (
                 .clk_i(clk_i),
                 .rst_ni(rst_ni),
                 .invalidate_all_i(1'b0),
@@ -342,7 +342,7 @@ module cpu64_system #(
     // Sink E channel from Xbar (L2 doesn't use it)
     assign l2_e_ready = 1'b1;
 
-    cpu64_l2_cache #(
+    rv64g_l2_cache #(
         .CORES(CORES),
         .SOURCE_W(M_SOURCE_W),
         .CID_W($clog2(CORES))

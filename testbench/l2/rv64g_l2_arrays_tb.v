@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module cpu64_l2_arrays_tb (
+module rv64g_l2_arrays_tb (
     input clk,
     input rst_n
 );
@@ -18,7 +18,7 @@ module cpu64_l2_arrays_tb (
     wire [16*64-1:0] rdata_way_flat_o;
     wire [16*50-1:0] tag_way_flat_o;
 
-    cpu64_l2_arrays dut (
+    rv64g_l2_arrays dut (
         .clk_i(clk),
         .rst_ni(rst_n),
         .index_i(index_i),

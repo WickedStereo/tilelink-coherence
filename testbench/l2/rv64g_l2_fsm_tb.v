@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module cpu64_l2_fsm_tb;
+module rv64g_l2_fsm_tb;
 
     // Parameters
     localparam CORES = 4;
@@ -109,7 +109,7 @@ module cpu64_l2_fsm_tb;
     reg mshr_busy;
 
     // DUT
-    cpu64_l2_fsm #(
+    rv64g_l2_fsm #(
         .CORES(CORES),
         .WAYS(WAYS),
         .SETS(SETS)
@@ -233,7 +233,7 @@ module cpu64_l2_fsm_tb;
 
     initial begin
         $dumpfile("obj_dir/wave_l2_fsm.vcd");
-        $dumpvars(0, cpu64_l2_fsm_tb);
+        $dumpvars(0, rv64g_l2_fsm_tb);
 
         clk = 0;
         rst_n = 0;

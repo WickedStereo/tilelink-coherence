@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module cpu64_l1_dcache_tb(
+module rv64g_l1_dcache_tb(
 	input clk,
 	input rst_n
 );
@@ -26,7 +26,7 @@ module cpu64_l1_dcache_tb(
 	wire [63:0] m_rdata;
 
 	// DUT
-	cpu64_l1_dcache dut (
+	rv64g_l1_dcache dut (
 		.clk_i(clk), .rst_ni(rst_n), .invalidate_all_i(1'b0),
 		.req_i(req), .we_i(we), .be_i(be), .addr_i(addr), .wdata_i(wdata),
 		.gnt_o(gnt), .rvalid_o(rvalid), .rdata_o(rdata),
@@ -35,7 +35,7 @@ module cpu64_l1_dcache_tb(
 	);
 
 	// Memory model
-	cpu64_l1_mem_model mem (
+	rv64g_l1_mem_model mem (
 		.clk_i(clk), .rst_ni(rst_n),
 		.req_i(m_req), .we_i(m_we), .be_i(m_be), .addr_i(m_addr), .wdata_i(m_wdata),
 		.gnt_o(m_gnt), .rvalid_o(m_rvalid), .rdata_o(m_rdata)

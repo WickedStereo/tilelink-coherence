@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module cpu64_l2_mshr_tb (
+module rv64g_l2_mshr_tb (
     input clk,
     input rst_n
 );
@@ -30,7 +30,7 @@ module cpu64_l2_mshr_tb (
     wire [TYPE_W-1:0]       type_o;
     wire [CORES-1:0]        pending_probes_o;
 
-    cpu64_l2_mshr #(
+    rv64g_l2_mshr #(
         .ADDR_W(ADDR_W),
         .SOURCE_W(SOURCE_W),
         .TYPE_W(TYPE_W),

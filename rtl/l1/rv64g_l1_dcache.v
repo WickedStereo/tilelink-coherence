@@ -1,11 +1,11 @@
-// cpu64_l1_dcache.v - Top-level
+// rv64g_l1_dcache.v - Top-level
 `timescale 1ns/1ps
 `include "params.vh"
 
 /* verilator lint_off UNUSEDSIGNAL */
 /* verilator lint_off UNUSEDPARAM */
 
-module cpu64_l1_dcache (
+module rv64g_l1_dcache (
 	input              clk_i,
 	input              rst_ni,
 
@@ -124,7 +124,7 @@ module cpu64_l1_dcache (
 	                 S_PERM_REQ = 4'd8,
                      S_PROBE_RESP = 4'd9;
 
-	cpu64_l1_arrays #(
+	rv64g_l1_arrays #(
 		.SETS(SETS),
 		.WAYS(WAYS),
 		.TAG_W(TAG_W),
@@ -153,7 +153,7 @@ module cpu64_l1_dcache (
 	wire [2:0] victim_way;
 	reg        plru_access_q;
 	reg [2:0]  plru_used_way_q;
-	cpu64_l1_plru #(
+	rv64g_l1_plru #(
 		.SETS(SETS),
 		.INDEX_W(INDEX_W)
 	) u_plru (

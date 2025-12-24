@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module cpu64_l2_mshr #(
+module rv64g_l2_mshr #(
     parameter ADDR_W = 64,
     parameter SOURCE_W = 6, // 4 (L1 Source) + 2 (Client ID)
     parameter TYPE_W = 3,   // Opcode

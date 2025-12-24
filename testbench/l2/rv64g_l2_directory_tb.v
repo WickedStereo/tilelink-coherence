@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module cpu64_l2_directory_tb (
+module rv64g_l2_directory_tb (
     input clk,
     input rst_n
 );
@@ -26,7 +26,7 @@ module cpu64_l2_directory_tb (
     reg [$clog2(CORES)-1:0] wr_owner_id_i;
     reg                     wr_dirty_i;
 
-    cpu64_l2_directory #(
+    rv64g_l2_directory #(
         .SETS(SETS),
         .WAYS(WAYS),
         .CORES(CORES)

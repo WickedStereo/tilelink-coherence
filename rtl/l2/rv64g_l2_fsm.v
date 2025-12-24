@@ -4,7 +4,7 @@
 /* verilator lint_off UNUSEDSIGNAL */
 /* verilator lint_off UNUSEDPARAM */
 
-module cpu64_l2_fsm #(
+module rv64g_l2_fsm #(
     parameter CORES = 4,
     parameter WAYS = 16,
     parameter SETS = 256,
@@ -198,7 +198,7 @@ module cpu64_l2_fsm #(
     reg plru_access;
     reg [3:0] plru_used_way;
     
-    cpu64_l2_plru plru (
+    rv64g_l2_plru plru (
         .clk_i(clk_i),
         .rst_ni(rst_ni),
         .set_i(req_addr_q[13:6]),

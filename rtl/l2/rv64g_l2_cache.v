@@ -2,7 +2,7 @@
 
 /* verilator lint_off UNUSEDSIGNAL */
 
-module cpu64_l2_cache #(
+module rv64g_l2_cache #(
     parameter CORES = 4,
     parameter WAYS = 16,
     parameter SETS = 64,
@@ -126,7 +126,7 @@ module cpu64_l2_cache #(
     // ---------------------------------------------------------
     // L2 FSM
     // ---------------------------------------------------------
-    cpu64_l2_fsm #(
+    rv64g_l2_fsm #(
         .CORES(CORES),
         .WAYS(WAYS),
         .SETS(SETS),
@@ -236,7 +236,7 @@ module cpu64_l2_cache #(
     // ---------------------------------------------------------
     // L2 Directory
     // ---------------------------------------------------------
-    cpu64_l2_directory #(
+    rv64g_l2_directory #(
         .SETS(SETS),
         .WAYS(WAYS),
         .CORES(CORES)
@@ -263,23 +263,23 @@ module cpu64_l2_cache #(
     // L2 Arrays (Tags + Data)
     // ---------------------------------------------------------
     // Note: Arrays module has combined interface for Tag and Data?
-    // Let's check cpu64_l2_arrays.v ports.
+    // Let's check rv64g_l2_arrays.v ports.
     // It has: index_i, word_sel_i, way_sel_i, write_en_i, be_i, tag_in_i, wdata_i
     // It seems it shares address/control for both Tag and Data?
     // But FSM drives them separately: tag_set_o, tag_way_o vs data_set_o, data_way_o.
     // And tag_we_o vs data_we_o.
     
-    // If cpu64_l2_arrays.v has shared control, we have a problem if FSM tries to access them differently.
+    // If rv64g_l2_arrays.v has shared control, we have a problem if FSM tries to access them differently.
     // FSM usually accesses them together or separately.
-    // Let's check cpu64_l2_arrays.v again.
+    // Let's check rv64g_l2_arrays.v again.
     
     // It has ONE set of controls: index_i, word_sel_i, way_sel_i, write_en_i.
     // This implies simultaneous access or shared port.
     // But FSM has separate outputs.
     // We might need to OR them or Multiplex them?
-    // Or maybe cpu64_l2_arrays.v needs to be split or modified?
+    // Or maybe rv64g_l2_arrays.v needs to be split or modified?
     // Or we instantiate two copies? No, they are physically different arrays (Tag vs Data).
-    // cpu64_l2_arrays.v contains BOTH.
+    // rv64g_l2_arrays.v contains BOTH.
     
     // If FSM asserts tag_we and data_we at same time for same set/way, it works.
     // If FSM asserts tag_we for Set A and data_we for Set B, it fails.
@@ -299,7 +299,7 @@ module cpu64_l2_cache #(
     // Priority Mux for Arrays
     // Data access is more frequent (bursts). Tag write is rare (miss).
     // But Tag Read is needed for lookup?
-    // Wait, cpu64_l2_arrays.v provides `tag_way_flat_o` which is ALL tags for ALL ways in the set?
+    // Wait, rv64g_l2_arrays.v provides `tag_way_flat_o` which is ALL tags for ALL ways in the set?
     // No, `tag_way_flat_o` depends on `index_i`.
     // So we need to drive `index_i` with `req_addr` during lookup.
     // FSM drives `tag_set_o` (which comes from req_addr).
@@ -321,7 +321,7 @@ module cpu64_l2_cache #(
     // `data_we_o` is 1 bit. `data_wdata_o` is 64 bits.
     // We assume full 64-bit write to array.
     
-    cpu64_l2_arrays arrays (
+    rv64g_l2_arrays arrays (
         .clk_i(clk_i),
         .rst_ni(rst_ni),
         .index_i(array_index),
@@ -341,7 +341,7 @@ module cpu64_l2_cache #(
     // ---------------------------------------------------------
     // L2 MSHR
     // ---------------------------------------------------------
-    cpu64_l2_mshr #(
+    rv64g_l2_mshr #(
         .ADDR_W(ADDR_W),
         .SOURCE_W(6), // 4 (L1 Source) + 2 (Client ID)? No, Source is 4 bits from L1.
         // Wait, FSM uses `a_source_i` which is 4 bits.
@@ -368,7 +368,7 @@ module cpu64_l2_cache #(
         // This is a level signal in ST_CHECK?
         // We need to be careful. MSHR `set_probes_i` loads the mask.
         // FSM should pulse it?
-        // In `cpu64_l2_fsm.v`:
+        // In `rv64g_l2_fsm.v`:
         // `mshr_set_probes_o` is driven in `ST_CHECK`.
         // It seems to be a level.
         // MSHR logic:

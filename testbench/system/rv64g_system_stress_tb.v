@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module cpu64_system_stress_tb;
+module rv64g_system_stress_tb;
 
     parameter CORES = 4;
     parameter ADDR_W = 64;
@@ -88,7 +88,7 @@ module cpu64_system_stress_tb;
     );
 
     // DUT Block
-    cpu64_system #(
+    rv64g_system #(
         .CORES(CORES)
     ) dut (
         .clk_i(clk),

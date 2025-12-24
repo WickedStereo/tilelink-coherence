@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 `include "params.vh"
 
-module cpu64_l1_probe_tb(
+module rv64g_l1_probe_tb(
 	input clk,
 	input rst_n
 );
@@ -69,7 +69,7 @@ module cpu64_l1_probe_tb(
 	wire [3:0]  tl_e_sink;
 
 	// DUT
-	cpu64_l1_dcache dut (
+	rv64g_l1_dcache dut (
 		.clk_i(clk), .rst_ni(rst_n),
 		.invalidate_all_i(1'b0),
 

@@ -1,12 +1,12 @@
 #include <verilated.h>
 #include <verilated_vcd_c.h>
-#include "Vcpu64_l2_directory_tb.h"
+#include "Vrv64g_l2_directory_tb.h"
 
 static vluint64_t sim_time = 0;
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
-    Vcpu64_l2_directory_tb* top = new Vcpu64_l2_directory_tb;
+    Vrv64g_l2_directory_tb* top = new Vrv64g_l2_directory_tb;
 
     Verilated::traceEverOn(true);
     VerilatedVcdC* tfp = new VerilatedVcdC;

@@ -1,11 +1,11 @@
-// cpu64_l1_arrays.v - Data/tag/valid/dirty arrays for L1 cache
+// rv64g_l1_arrays.v - Data/tag/valid/dirty arrays for L1 cache
 `timescale 1ns/1ps
 `include "params.vh"
 
 /* verilator lint_off UNUSEDSIGNAL */
 /* verilator lint_off UNUSEDPARAM */
 
-module cpu64_l1_arrays #(
+module rv64g_l1_arrays #(
     parameter integer SETS = 32,
     parameter integer WAYS = 8,
     parameter integer TAG_W = 53, // 64 - 5(index) - 6(offset)

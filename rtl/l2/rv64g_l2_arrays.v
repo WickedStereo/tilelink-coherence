@@ -1,12 +1,12 @@
 
 `timescale 1ns/1ps
-// cpu64_l2_arrays.v - Data/tag arrays for 256KiB, 16-way, 64B lines
+// rv64g_l2_arrays.v - Data/tag arrays for 256KiB, 16-way, 64B lines
 `include "params.vh"
 
 /* verilator lint_off UNUSEDSIGNAL */
 /* verilator lint_off UNUSEDPARAM */
 
-module cpu64_l2_arrays (
+module rv64g_l2_arrays (
 	input               clk_i,
 	input               rst_ni,
 

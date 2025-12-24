@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module cpu64_system_tb;
+module rv64g_system_tb;
 
     parameter CORES = 4;
     parameter ADDR_W = 64;
@@ -42,7 +42,7 @@ module cpu64_system_tb;
     wire         mem_d_ready;
 
     // DUT
-    cpu64_system #(
+    rv64g_system #(
         .CORES(CORES)
     ) dut (
         .clk_i(clk),
@@ -242,7 +242,7 @@ module cpu64_system_tb;
     // VCD Dump
     initial begin
         $dumpfile("obj_dir/wave_system.vcd");
-        $dumpvars(0, cpu64_system_tb);
+        $dumpvars(0, rv64g_system_tb);
     end
 
 endmodule

@@ -1,7 +1,7 @@
-// cpu64_l2_plru.v - 16-way PLRU (15-bit tree) with invalid-first victim
+// rv64g_l2_plru.v - 16-way PLRU (15-bit tree) with invalid-first victim
 `timescale 1ns/1ps
 
-module cpu64_l2_plru (
+module rv64g_l2_plru (
 	input              clk_i,
 	input              rst_ni,
 

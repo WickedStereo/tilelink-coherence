@@ -2,7 +2,7 @@
 
 /* verilator lint_off UNUSEDSIGNAL */
 
-module cpu64_l2_directory #(
+module rv64g_l2_directory #(
     parameter SETS = 256,
     parameter WAYS = 16,
     parameter CORES = 4

@@ -1,4 +1,4 @@
-#include "Vcpu64_l2_fsm_tb.h"
+#include "Vrv64g_l2_fsm_tb.h"
 #include "verilated.h"
 #include "verilated_vcd_c.h"
 
@@ -6,7 +6,7 @@ int main(int argc, char **argv) {
     Verilated::commandArgs(argc, argv);
     Verilated::traceEverOn(true);
 
-    Vcpu64_l2_fsm_tb *top = new Vcpu64_l2_fsm_tb;
+    Vrv64g_l2_fsm_tb *top = new Vrv64g_l2_fsm_tb;
     VerilatedVcdC *m_trace = new VerilatedVcdC;
 
     top->trace(m_trace, 5);
