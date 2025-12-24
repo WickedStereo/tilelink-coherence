@@ -1,5 +1,5 @@
 `timescale 1ns/1ps
-`include "rtl/params.vh"
+`include "params.vh"
 
 /* verilator lint_off UNUSEDSIGNAL */
 /* verilator lint_off UNUSEDPARAM */

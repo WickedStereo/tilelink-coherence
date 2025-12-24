@@ -1,6 +1,6 @@
 // cpu64_l1_dcache.v - Top-level
 `timescale 1ns/1ps
-`include "rtl/params.vh"
+`include "params.vh"
 
 /* verilator lint_off UNUSEDSIGNAL */
 /* verilator lint_off UNUSEDPARAM */
@@ -112,6 +112,18 @@ module cpu64_l1_dcache (
 		end
 	end
 
+	// State and control for refill + writeback FSM
+	localparam [3:0] S_IDLE = 4'd0,
+	                 S_REF_REQ = 4'd1,
+	                 S_REF_WAIT = 4'd2,
+	                 S_ACK = 4'd3,
+	                 S_RESP = 4'd4,
+	                 S_WB_REQ = 4'd5,
+	                 S_WB_DATA = 4'd6,
+	                 S_WB_WAIT = 4'd7,
+	                 S_PERM_REQ = 4'd8,
+                     S_PROBE_RESP = 4'd9;
+
 	cpu64_l1_arrays #(
 		.SETS(SETS),
 		.WAYS(WAYS),
@@ -154,21 +166,6 @@ module cpu64_l1_dcache (
 		.victim_o  (victim_way)
 	);
 
-	// Verilog-2001 friendly: use indexed part-selects directly; derive hit_data_word when hit_way known
-	wire [63:0] hit_data_word;
-	assign hit_data_word = arr_rdata_way_flat[(((32'(hit_way)+1)*DATA_W)-1) -: DATA_W];
-
-	// State and control for refill + writeback FSM
-	localparam [3:0] S_IDLE = 4'd0,
-	                 S_REF_REQ = 4'd1,
-	                 S_REF_WAIT = 4'd2,
-	                 S_ACK = 4'd3,
-	                 S_RESP = 4'd4,
-	                 S_WB_REQ = 4'd5,
-	                 S_WB_DATA = 4'd6,
-	                 S_WB_WAIT = 4'd7,
-	                 S_PERM_REQ = 4'd8,
-                     S_PROBE_RESP = 4'd9;
 
 	// "_q" suffix = registered (current) value; "_n" suffix = next-state value
 	reg [3:0] state, state_n;                               // FSM state
@@ -237,6 +234,11 @@ module cpu64_l1_dcache (
 			end
 		end
 	end
+	
+	// Verilog-2001 friendly: use indexed part-selects directly; derive hit_data_word when hit_way known
+	wire [63:0] hit_data_word;
+	assign hit_data_word = arr_rdata_way_flat[(((hit_way+1)*DATA_W)-1) -: DATA_W];
+
 
 	// Next-state logic and outputs
 	reg gnt_n, rvalid_n;
@@ -467,7 +469,7 @@ module cpu64_l1_dcache (
 				pend_word_n   = word_off;
 				pend_victim_n = victim_way;
 				pend_is_store_n = 1'b0;
-				pend_evict_tag_n = arr_tag_way_flat[(((32'(victim_way)+1)*TAG_W)-1) -: TAG_W];
+				pend_evict_tag_n = arr_tag_way_flat[(((victim_way+1)*TAG_W)-1) -: TAG_W];
 				beat_n        = 3'd0;
 				if (arr_valid_way[victim_way] && arr_dirty_way[victim_way]) begin
 					state_n = S_WB_REQ;
@@ -491,7 +493,7 @@ module cpu64_l1_dcache (
 				pend_is_store_n= 1'b1;
 				pend_wdata_n   = wdata_i;
 				pend_be_n      = be_i;
-				pend_evict_tag_n = arr_tag_way_flat[(((32'(victim_way)+1)*TAG_W)-1) -: TAG_W];
+				pend_evict_tag_n = arr_tag_way_flat[(((victim_way+1)*TAG_W)-1) -: TAG_W];
 				beat_n         = 3'd0;
 				if (arr_valid_way[victim_way] && arr_dirty_way[victim_way]) begin
 					state_n = S_WB_REQ;

@@ -70,6 +70,7 @@ module cpu64_l1_plru #(
 	reg       has_invalid;
 
 	integer k;
+    reg d2, d1, d0;
 	always @(*) begin
 		// Default: PLRU tree walk
 		// Root
@@ -80,7 +81,6 @@ module cpu64_l1_plru #(
 		// Level 2 (MSB of way index)
 		// If bit is 0 choose left (0), if 1 choose right (1)
 		// Compose leaf index as {d2,d1,d0}
-		reg d2, d1, d0;
 		d2 = plru_bits_q[set_i][0];
 		if (!d2) begin
 			d1 = plru_bits_q[set_i][1];

@@ -1,6 +1,6 @@
 // cpu64_l1_arrays.v - Data/tag/valid/dirty arrays for L1 cache
 `timescale 1ns/1ps
-`include "rtl/params.vh"
+`include "params.vh"
 
 /* verilator lint_off UNUSEDSIGNAL */
 /* verilator lint_off UNUSEDPARAM */
@@ -63,7 +63,8 @@ module cpu64_l1_arrays #(
 			assign state_way_flat_o[(w+1)*2-1      : w*2]      = state_q[w][index_i];
 		end
 	endgenerate
-
+    reg [63:0] be_mask;
+    integer b;
 	integer i, j;
 	always @(posedge clk_i or negedge rst_ni) begin
 		if (!rst_ni) begin
@@ -81,8 +82,6 @@ module cpu64_l1_arrays #(
 			end
 		end else if (write_en_i) begin
 			// Byte-enable aware RMW for 64b word (Verilog-2001 style part-select)
-			reg [63:0] be_mask;
-			integer b;
 			be_mask = 64'b0;
 			for (b = 0; b < 8; b = b + 1) begin
 				if (be_i[b]) be_mask[(b*8) +: 8] = 8'hFF;

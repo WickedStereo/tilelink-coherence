@@ -101,10 +101,10 @@ module cpu64_l2_directory #(
     // For now, let's assume the controller invalidates on startup or we use a loop.
     // To keep it simple and synthesizable as RAM, no async reset on the array.
     // We can add a "reset_all" state machine in the controller later.
-    
+            integer i;
+
     // However, for the testbench to work without X, let's initialize in `initial`.
     initial begin
-        integer i;
         for (i = 0; i < SETS; i = i + 1) begin
             ram[i] = 0;
         end
