@@ -1,5 +1,10 @@
+
+`timescale 1ns/1ps
 // cpu64_l2_arrays.v - Data/tag arrays for 256KiB, 16-way, 64B lines
-// `timescale 1ns/1ps
+`include "rtl/params.vh"
+
+/* verilator lint_off UNUSEDSIGNAL */
+/* verilator lint_off UNUSEDPARAM */
 
 module cpu64_l2_arrays (
 	input               clk_i,
@@ -25,7 +30,6 @@ module cpu64_l2_arrays (
 
 	localparam integer DATA_W          = 64;
 	localparam integer TAG_W           = 50;
-	localparam integer LINE_BYTES      = 64;
 	localparam integer WORDS_PER_LINE  = 8;   // 64B / 8B
 	localparam integer WAYS            = 16;
 	localparam integer SETS            = 256; // 256KiB / (64B * 16 ways) = 256 sets
@@ -58,7 +62,6 @@ module cpu64_l2_arrays (
 		if (data_we_i) begin
 			// Byte-enable aware RMW for 64b word
 			reg [63:0] be_mask;
-            $display("L2 Array Write: Way=%d, Index=%d, WordSel=%d, Data=%h", way_sel_i, index_i, word_sel_i, wdata_i);
 			be_mask = 64'b0;
 			for (b = 0; b < 8; b = b + 1) begin
 				if (be_i[b]) be_mask[(b*8) +: 8] = 8'hFF;

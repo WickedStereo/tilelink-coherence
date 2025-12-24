@@ -72,7 +72,6 @@ module cpu64_l1_probe_tb(
 	cpu64_l1_dcache dut (
 		.clk_i(clk), .rst_ni(rst_n),
 		.invalidate_all_i(1'b0),
-		.binv_req_i(1'b0), .binv_addr_i(64'd0), .binv_ack_o(), // Legacy ports
 
 		.req_i(req), .we_i(we), .be_i(be), .addr_i(addr), .wdata_i(wdata),
 		.gnt_o(gnt), .rvalid_o(rvalid), .rdata_o(rdata),

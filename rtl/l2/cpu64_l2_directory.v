@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
 
+/* verilator lint_off UNUSEDSIGNAL */
+
 module cpu64_l2_directory #(
     parameter SETS = 256,
     parameter WAYS = 16,

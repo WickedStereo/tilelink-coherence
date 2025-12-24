@@ -87,6 +87,14 @@ module cpu64_system #(
     wire [CORES-1:0]          l1_d_denied;
     wire [CORES*DATA_W-1:0]   l1_d_data;
     wire [CORES-1:0]          l1_d_corrupt;
+    
+    wire [CORES-1:0]          unused_l1_d_param_msb;
+    genvar k;
+    generate
+        for (k = 0; k < CORES; k = k + 1) begin : gen_unused_l1
+            assign unused_l1_d_param_msb[k] = l1_d_param[k*3 + 2];
+        end
+    endgenerate
 
     wire [CORES-1:0]          l1_e_valid;
     wire [CORES-1:0]          l1_e_ready;
@@ -97,12 +105,8 @@ module cpu64_system #(
     wire          l2_a_ready;
     wire [2:0]    l2_a_opcode;
     wire [2:0]    l2_a_param;
-    wire [3:0]    l2_a_size;
     wire [M_SOURCE_W-1:0] l2_a_source;
     wire [ADDR_W-1:0]   l2_a_address;
-    wire [7:0]    l2_a_mask;
-    wire [DATA_W-1:0]   l2_a_data;
-    wire          l2_a_corrupt;
 
     wire          l2_b_valid;
     wire          l2_b_ready;
@@ -120,11 +124,9 @@ module cpu64_system #(
     wire          l2_c_ready;
     wire [2:0]    l2_c_opcode;
     wire [2:0]    l2_c_param;
-    wire [3:0]    l2_c_size;
     wire [M_SOURCE_W-1:0] l2_c_source;
     wire [ADDR_W-1:0]   l2_c_address;
     wire [DATA_W-1:0]   l2_c_data;
-    wire          l2_c_corrupt;
 
     wire          l2_d_valid;
     wire          l2_d_ready;
@@ -137,9 +139,17 @@ module cpu64_system #(
     wire [DATA_W-1:0]   l2_d_data;
     wire          l2_d_corrupt;
 
-    wire          l2_e_valid;
     wire          l2_e_ready;
-    wire [SINK_W-1:0] l2_e_sink;
+
+    // Unused Manager Interface Signals
+    wire [3:0]    unused_l2_a_size;
+    wire [7:0]    unused_l2_a_mask;
+    wire [DATA_W-1:0] unused_l2_a_data;
+    wire          unused_l2_a_corrupt;
+    wire [3:0]    unused_l2_c_size;
+    wire          unused_l2_c_corrupt;
+    wire          unused_l2_e_valid;
+    wire [SINK_W-1:0] unused_l2_e_sink;
 
     genvar i;
     generate
@@ -148,9 +158,6 @@ module cpu64_system #(
                 .clk_i(clk_i),
                 .rst_ni(rst_ni),
                 .invalidate_all_i(1'b0),
-                .binv_req_i(1'b0), // No back-invalidation from outside
-                .binv_addr_i(64'd0),
-                .binv_ack_o(),
                 
                 .req_i(cpu_req_i[i]),
                 .we_i(cpu_we_i[i]),
@@ -275,12 +282,12 @@ module cpu64_system #(
         .mgr_a_ready_i(l2_a_ready),
         .mgr_a_opcode_o(l2_a_opcode),
         .mgr_a_param_o(l2_a_param),
-        .mgr_a_size_o(l2_a_size),
+        .mgr_a_size_o(unused_l2_a_size),
         .mgr_a_source_o(l2_a_source),
         .mgr_a_address_o(l2_a_address),
-        .mgr_a_mask_o(l2_a_mask),
-        .mgr_a_data_o(l2_a_data),
-        .mgr_a_corrupt_o(l2_a_corrupt),
+        .mgr_a_mask_o(unused_l2_a_mask),
+        .mgr_a_data_o(unused_l2_a_data),
+        .mgr_a_corrupt_o(unused_l2_a_corrupt),
 
         .mgr_b_valid_i(l2_b_valid),
         .mgr_b_ready_o(l2_b_ready),
@@ -298,11 +305,11 @@ module cpu64_system #(
         .mgr_c_ready_i(l2_c_ready),
         .mgr_c_opcode_o(l2_c_opcode),
         .mgr_c_param_o(l2_c_param),
-        .mgr_c_size_o(l2_c_size),
+        .mgr_c_size_o(unused_l2_c_size),
         .mgr_c_source_o(l2_c_source),
         .mgr_c_address_o(l2_c_address),
         .mgr_c_data_o(l2_c_data),
-        .mgr_c_corrupt_o(l2_c_corrupt),
+        .mgr_c_corrupt_o(unused_l2_c_corrupt),
 
         .mgr_d_valid_i(l2_d_valid),
         .mgr_d_ready_o(l2_d_ready),
@@ -315,9 +322,9 @@ module cpu64_system #(
         .mgr_d_data_i(l2_d_data),
         .mgr_d_corrupt_i(l2_d_corrupt),
 
-        .mgr_e_valid_o(l2_e_valid),
+        .mgr_e_valid_o(unused_l2_e_valid),
         .mgr_e_ready_i(l2_e_ready),
-        .mgr_e_sink_o(l2_e_sink)
+        .mgr_e_sink_o(unused_l2_e_sink)
     );
 
     // L2 Cache

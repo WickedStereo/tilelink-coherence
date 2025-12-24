@@ -1,5 +1,9 @@
 // cpu64_l1_dcache.v - Top-level
- `timescale 1ns/1ps
+`timescale 1ns/1ps
+`include "rtl/params.vh"
+
+/* verilator lint_off UNUSEDSIGNAL */
+/* verilator lint_off UNUSEDPARAM */
 
 module cpu64_l1_dcache (
 	input              clk_i,
@@ -7,11 +11,6 @@ module cpu64_l1_dcache (
 
 	// Optional maintenance
 	input              invalidate_all_i,
-
-	// Back-invalidate from L2 → L1 (inclusive)
-	input              binv_req_i,
-	input      [63:0]  binv_addr_i,
-	output reg         binv_ack_o,
 
 	// CPU-side (slave-like OBI style)
 	input              req_i,
@@ -157,7 +156,7 @@ module cpu64_l1_dcache (
 
 	// Verilog-2001 friendly: use indexed part-selects directly; derive hit_data_word when hit_way known
 	wire [63:0] hit_data_word;
-	assign hit_data_word = arr_rdata_way_flat[(((hit_way+1)*DATA_W)-1) -: DATA_W];
+	assign hit_data_word = arr_rdata_way_flat[(((32'(hit_way)+1)*DATA_W)-1) -: DATA_W];
 
 	// State and control for refill + writeback FSM
 	localparam [3:0] S_IDLE = 4'd0,
@@ -247,7 +246,6 @@ module cpu64_l1_dcache (
 	// reg [63:0] addr_n, wdata_n;
 	reg        plru_access_n;
 	reg [2:0]  plru_used_way_n;
-	reg        binv_ack_n;
 
 	// TileLink Next-State Signals
 	reg        tl_a_valid_n;
@@ -469,7 +467,7 @@ module cpu64_l1_dcache (
 				pend_word_n   = word_off;
 				pend_victim_n = victim_way;
 				pend_is_store_n = 1'b0;
-				pend_evict_tag_n = arr_tag_way_flat[((victim_way+1)*TAG_W-1) -: TAG_W];
+				pend_evict_tag_n = arr_tag_way_flat[(((32'(victim_way)+1)*TAG_W)-1) -: TAG_W];
 				beat_n        = 3'd0;
 				if (arr_valid_way[victim_way] && arr_dirty_way[victim_way]) begin
 					state_n = S_WB_REQ;
@@ -493,7 +491,7 @@ module cpu64_l1_dcache (
 				pend_is_store_n= 1'b1;
 				pend_wdata_n   = wdata_i;
 				pend_be_n      = be_i;
-				pend_evict_tag_n = arr_tag_way_flat[((victim_way+1)*TAG_W-1) -: TAG_W];
+				pend_evict_tag_n = arr_tag_way_flat[(((32'(victim_way)+1)*TAG_W)-1) -: TAG_W];
 				beat_n         = 3'd0;
 				if (arr_valid_way[victim_way] && arr_dirty_way[victim_way]) begin
 					state_n = S_WB_REQ;
@@ -891,7 +889,6 @@ module cpu64_l1_dcache (
 			gnt_o    <= 1'b0;
 			rvalid_o <= 1'b0;
 			rdata_o  <= 64'd0;
-			binv_ack_o<= 1'b0;
 
 			tl_a_valid_o <= 1'b0;
 			tl_a_opcode_o <= 3'b0;
@@ -922,7 +919,6 @@ module cpu64_l1_dcache (
 			gnt_o    <= gnt_n;
 			rvalid_o <= rvalid_n;
 			rdata_o  <= rdata_n;
-			binv_ack_o<= binv_ack_n;
 
 			tl_a_valid_o <= tl_a_valid_n;
 			tl_a_opcode_o <= tl_a_opcode_n;

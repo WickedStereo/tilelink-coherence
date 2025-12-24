@@ -31,6 +31,6 @@ module tl_demux #(
     // Assuming sel_i is always valid for now.
     
     // We can use a simple mux for ready_o
-    assign ready_o = (sel_i < N) ? ready_i[sel_i] : 1'b0;
+    assign ready_o = ({{(32-SEL_W){1'b0}}, sel_i} < N) ? ready_i[sel_i] : 1'b0;
 
 endmodule

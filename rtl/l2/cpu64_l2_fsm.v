@@ -1,4 +1,8 @@
 `timescale 1ns/1ps
+`include "rtl/params.vh"
+
+/* verilator lint_off UNUSEDSIGNAL */
+/* verilator lint_off UNUSEDPARAM */
 
 module cpu64_l2_fsm #(
     parameter CORES = 4,
@@ -311,11 +315,7 @@ module cpu64_l2_fsm #(
     // If FSM is in ST_WAIT_ACK, it is waiting for ProbeAck.
     // ProbeAck comes on C.
     
-    // Let's define C-Channel opcodes (from Params.vh)
-    localparam C_PROBE_ACK      = 3'd4;
-    localparam C_PROBE_ACK_DATA = 3'd5;
-    localparam C_RELEASE        = 3'd6;
-    localparam C_RELEASE_DATA   = 3'd7;
+    // Let's use C-Channel opcodes from params.vh
 
     reg c_handled;
     reg c_is_probe_ack;
@@ -386,11 +386,9 @@ module cpu64_l2_fsm #(
 
         // C-Channel Processing (High Priority for ProbeAck)
         if (c_valid_i) begin
-            // $display("L2 C-Channel Valid. Opcode=%d. State=%d", c_opcode_i, state_q);
             if (c_is_probe_ack) begin
                 // Always accept ProbeAck
                 c_ready_o = 1'b1;
-                $display("L2 C-Channel: Valid=1, Ready=1, Opcode=%d, Cnt=%d, Data=%h", c_opcode_i, probe_data_cnt, c_data_i);
                 // Map Source ID to Core ID. Assuming Source[1:0] is Core ID.
                 mshr_probe_ack_id_o = c_source_i[SOURCE_W-1 -: CID_W];
                 
@@ -401,9 +399,6 @@ module cpu64_l2_fsm #(
                     data_set_o = req_addr_q[13:6];
                     data_word_sel_o = probe_data_cnt; 
                     data_wdata_o = c_data_i;
-                    
-                    // Debug Print
-                    $display("L2 FSM: ProbeAckData Beat %d. Data=%h. Way=%d. Set=%h. Hit=%b", probe_data_cnt, c_data_i, data_way_o, data_set_o, latched_hit);
 
                     // Only signal MSHR on last beat
                     if (probe_data_cnt == 3'd7) begin
@@ -483,7 +478,6 @@ module cpu64_l2_fsm #(
                     end
                 end else begin
                     // Acquire Handling
-                    $display("L2: ST_CHECK. Hit: %b, ProbesToSend: %b, ReqOp: %d, ReqCore: %d", hit, probes_to_send, req_opcode_q, req_core_id);
                     // Check if we need to send probes (Hit or Eviction)
                     if (probes_to_send != 0) begin
                         if (probes_sent_q == 0) begin
@@ -493,7 +487,6 @@ module cpu64_l2_fsm #(
                         if (probe_needed) begin
                             b_valid_o = 1'b1;
                             b_dest_o = next_probe_target;
-                            $display("L2: Sending Probe to %d. Addr: %h, Opcode: %d", next_probe_target, b_address_o, b_opcode_o);
                             
                             if (hit) begin
                                 b_address_o = req_addr_q;
@@ -531,14 +524,12 @@ module cpu64_l2_fsm #(
 
             ST_WAIT_ACK: begin
                 if (mshr_pending_probes_i == 0) begin
-                    $display("L2: All probes acked (Hit).");
                     next_state = ST_GRANT;
                 end
             end
 
             ST_EVICT_WAIT: begin
                 if (mshr_pending_probes_i == 0) begin
-                    $display("L2: All probes acked (Evict). VictimDirty: %b", victim_dirty_q);
                     // All probes acked. Victim is now Invalid (in L1s).
                     if (victim_dirty_q) begin
                         next_state = ST_MEM_WRITE;
@@ -554,7 +545,6 @@ module cpu64_l2_fsm #(
                     mem_a_valid_o = 1'b1;
                     mem_a_opcode_o = 3'd4; // Get
                     mem_a_address_o = {req_addr_q[63:6], 6'b0}; // Align to line
-                    $display("L2: ST_MEM_READ. Sending Get. Addr: %h. Ready: %b", mem_a_address_o, mem_a_ready_i);
                 end
                 
                 // Receive Data
@@ -702,6 +692,9 @@ module cpu64_l2_fsm #(
                 mshr_dealloc_o = 1'b1;
                 next_state = ST_IDLE;
             end
+            default: begin
+                next_state = ST_IDLE;
+            end
         endcase
     end
 
@@ -712,15 +705,12 @@ module cpu64_l2_fsm #(
             req_addr_q <= 64'd0;
             req_opcode_q <= 3'd0;
             req_param_q <= 3'd0;
-            req_source_q <= 4'd0;
+            req_source_q <= 6'd0;
             probes_sent_q <= {CORES{1'b0}};
             burst_cnt <= 3'd0;
             probe_data_cnt <= 3'd0;
             mem_req_sent_q <= 1'b0;
         end else begin
-            if (state_q != next_state) begin
-                $display("L2 FSM State: %d -> %d", state_q, next_state);
-            end
             state_q <= next_state;
 
             // Probe Data Counter Logic
@@ -738,7 +728,6 @@ module cpu64_l2_fsm #(
                 // Track if Get sent
                 if (mem_a_valid_o && mem_a_ready_i) begin
                     mem_req_sent_q <= 1'b1;
-                    $display("L2: mem_req_sent_q set to 1. Valid=%b, Ready=%b", mem_a_valid_o, mem_a_ready_i);
                 end
             end else if (state_q == ST_MEM_WRITE) begin
                 if (mem_a_valid_o && mem_a_ready_i) begin

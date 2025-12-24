@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
 
+/* verilator lint_off UNUSEDSIGNAL */
+
 module cpu64_l2_cache #(
     parameter CORES = 4,
     parameter WAYS = 16,
@@ -97,19 +99,20 @@ module cpu64_l2_cache #(
     wire [3:0]    tag_way;
     wire [49:0]   tag_wdata;
     
-    wire [7:0]    data_set;
     wire [3:0]    data_way;
     wire [2:0]    data_word_sel;
     wire          data_we;
     wire [63:0]   data_wdata;
     wire [63:0]   data_rdata;
     
-    // Unused Array Outputs
-    wire [63:0]   data_rdata_selected; // Not used by FSM, FSM uses data_rdata (which is rdata_selected_o from arrays?)
-    // Wait, FSM expects data_rdata_i. Arrays provide rdata_selected_o and rdata_way_flat_o.
-    // FSM uses rdata_selected_o (read data for specific way/word).
-    
-    wire [49:0]   tag_selected; // Not used by FSM? FSM uses tag_way_flat_i for victim selection.
+    // Unused Array/MSHR Outputs
+    wire [7:0]          unused_data_set;
+    wire [49:0]         unused_tag_selected;
+    wire [WAYS*64-1:0]  unused_rdata_way_flat;
+    wire                unused_mshr_alloc_ready;
+    wire [ADDR_W-1:0]   unused_mshr_addr;
+    wire [SOURCE_W-1:0] unused_mshr_source;
+    wire [2:0]          unused_mshr_type;
 
     // MSHR Signals
     wire          mshr_alloc;
@@ -120,12 +123,6 @@ module cpu64_l2_cache #(
     wire [CORES-1:0] mshr_pending_probes;
     wire          mshr_busy;
     
-    // MSHR Internal connections
-    wire          mshr_valid;
-    wire [ADDR_W-1:0] mshr_addr;
-    wire [5:0]    mshr_source; // 4+2
-    wire [2:0]    mshr_type;
-
     // ---------------------------------------------------------
     // L2 FSM
     // ---------------------------------------------------------
@@ -219,7 +216,7 @@ module cpu64_l2_cache #(
         .tag_way_o(tag_way),
         .tag_wdata_o(tag_wdata),
 
-        .data_set_o(data_set),
+        .data_set_o(unused_data_set),
         .data_way_o(data_way),
         .data_word_sel_o(data_word_sel),
         .data_we_o(data_we),
@@ -315,7 +312,8 @@ module cpu64_l2_cache #(
     // In ST_IDLE/RAM_WAIT, FSM drives `tag_set_o = req_addr_q[13:6]`.
     // So we can default to tag_set_o.
     
-    assign array_index = (data_we) ? data_set : tag_set; 
+    // Fix UNOPTFLAT: Use tag_set directly as it is always req_addr_q[13:6]
+    assign array_index = tag_set; 
     assign array_way_sel = (data_we) ? data_way : tag_way;
     assign array_word_sel = data_word_sel;
     assign array_be = 8'hFF; // Always full word write for now? FSM doesn't output mask for data array write?
@@ -335,8 +333,8 @@ module cpu64_l2_cache #(
         .tag_in_i(tag_wdata),
         .wdata_i(data_wdata),
         .rdata_selected_o(data_rdata),
-        .tag_selected_o(tag_selected),
-        .rdata_way_flat_o(), // Unused
+        .tag_selected_o(unused_tag_selected),
+        .rdata_way_flat_o(unused_rdata_way_flat), 
         .tag_way_flat_o(tag_way_flat)
     );
 
@@ -360,11 +358,7 @@ module cpu64_l2_cache #(
         .alloc_addr_i(tl_a_address_i), // Alloc uses current A address
         .alloc_source_i(tl_a_source_i), // Alloc uses current A source
         .alloc_type_i(tl_a_opcode_i),   // Alloc uses current A opcode
-        .alloc_ready_o(), // FSM checks mshr_busy, not alloc_ready?
-        // Wait, FSM has `a_ready_o = !mshr_busy_i`.
-        // MSHR has `alloc_ready_o = !valid_q`.
-        // `mshr_busy` output from MSHR is `valid_o`.
-        // So we connect `mshr_busy` to `valid_o`.
+        .alloc_ready_o(unused_mshr_alloc_ready),
         
         .dealloc_req_i(mshr_dealloc),
         .set_probes_i(mshr_set_probes != 0), // Trigger when mask is non-zero?
@@ -392,9 +386,9 @@ module cpu64_l2_cache #(
         .probe_ack_id_i(mshr_probe_ack_id),
         
         .valid_o(mshr_busy),
-        .addr_o(), // FSM latches address internally? Yes `req_addr_q`.
-        .source_o(), // FSM latches source internally? Yes `req_source_q`.
-        .type_o(),   // FSM latches opcode internally? Yes `req_opcode_q`.
+        .addr_o(unused_mshr_addr),
+        .source_o(unused_mshr_source),
+        .type_o(unused_mshr_type),
         .pending_probes_o(mshr_pending_probes)
     );
 

@@ -1,5 +1,9 @@
-// cpu64_l1_arrays.v - Data/tag/valid/dirty arrays for 32KiB, 8-way, 64B lines
-// `timescale 1ns/1ps
+// cpu64_l1_arrays.v - Data/tag/valid/dirty arrays for L1 cache
+`timescale 1ns/1ps
+`include "rtl/params.vh"
+
+/* verilator lint_off UNUSEDSIGNAL */
+/* verilator lint_off UNUSEDPARAM */
 
 module cpu64_l1_arrays #(
     parameter integer SETS = 32,
@@ -32,8 +36,7 @@ module cpu64_l1_arrays #(
 );
 
 	localparam integer DATA_W          = 64;
-	localparam integer LINE_BYTES      = 64;
-	localparam integer WORDS_PER_LINE  = 8;  // 64B / 8B
+	localparam integer WORDS_PER_LINE  = LINE_BYTES / 8;
 	localparam integer LINE_ADDR_W     = INDEX_W + 3;  // index + 3 (word)
 
 	// Storage arrays (flattened to 2D for Verilog-2001)

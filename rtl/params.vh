@@ -1,6 +1,8 @@
 `ifndef PARAMS_VH
 `define PARAMS_VH
 
+/* verilator lint_off UNUSEDPARAM */
+
 localparam integer NUM_CORES = 4;
 localparam integer LINE_BYTES = 64;
 

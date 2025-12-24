@@ -125,7 +125,7 @@ module tl_socket_m1 #(
     output [SINK_W-1:0]             mgr_e_sink_o
 );
 
-    localparam CID_W = $clog2(N_CLIENTS);
+    localparam CID_W = (N_CLIENTS > 1) ? $clog2(N_CLIENTS) : 1;
 
     // ========================================================================
     // Channel A: N -> 1 Arbiter
