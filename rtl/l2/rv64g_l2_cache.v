@@ -5,7 +5,7 @@
 module rv64g_l2_cache #(
     parameter CORES = 4,
     parameter WAYS = 16,
-    parameter SETS = 64,
+    parameter SETS = 256,
     parameter ADDR_W = 64,
     parameter DATA_W = 64,
     parameter SOURCE_W = 6,

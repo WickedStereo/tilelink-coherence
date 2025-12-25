@@ -32,7 +32,7 @@ module rv64g_l2_arrays (
 	localparam integer TAG_W           = 50;
 	localparam integer WORDS_PER_LINE  = 8;   // 64B / 8B
 	localparam integer WAYS            = 16;
-	localparam integer SETS            = 64; // 256KiB / (64B * 16 ways) = 256 sets
+	localparam integer SETS            = 256; // 256KiB / (64B * 16 ways) = 256 sets
 	localparam integer LINE_ADDR_W     = 11;  // 8 (index) + 3 (word)
 
 	// Storage arrays (flattened to 2D for Verilog-2001)
