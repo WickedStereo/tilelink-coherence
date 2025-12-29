@@ -1,11 +1,20 @@
 #include <verilated.h>
 #include <verilated_vcd_c.h>
 #include "Vrv64g_cache_system_stress_tb.h"
+#include <iostream>
+#include <iomanip>
 
 int main(int argc, char** argv) {
     VerilatedContext* contextp = new VerilatedContext;
     contextp->commandArgs(argc, argv);
     contextp->traceEverOn(true);
+    
+    std::cout << "========================================\n";
+    std::cout << "TileLink Cache System Stress Test\n";
+    std::cout << "========================================\n";
+    std::cout << "Starting simulation...\n";
+    std::cout << "Timeout: 10000000 cycles\n";
+    std::cout << "========================================\n\n";
     
     Vrv64g_cache_system_stress_tb* top = new Vrv64g_cache_system_stress_tb{contextp};
     VerilatedVcdC* tfp = new VerilatedVcdC;
@@ -21,14 +30,19 @@ int main(int argc, char** argv) {
         // Advance time to next event
         contextp->time(top->nextTimeSlot());
         
-        if (contextp->time() > 10000000) { // Timeout
-            printf("Simulation timed out at %ld\n", contextp->time());
+        // Timeout check (10000000 cycles * 10ns/cycle = 100000000 ns)
+        if (contextp->time() > 100000000) {
+            // Note: We can't easily get Verilog $time here, so we'll let Verilog handle the timeout message
             break;
         }
     }
 
+    // Final summary - let Verilog handle the detailed timing messages
+    // We just print a simple completion message
     if (contextp->gotFinish()) {
-        printf("Simulation finished by $finish\n");
+        std::cout << "\nSimulation finished by $finish\n";
+    } else {
+        std::cout << "\nSimulation ended (no more events)\n";
     }
 
     top->final();

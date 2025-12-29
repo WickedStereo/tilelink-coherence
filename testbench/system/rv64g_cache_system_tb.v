@@ -163,46 +163,71 @@ module rv64g_cache_system_tb;
         #20 rst_n = 1;
         
         #20;
-        $display("Starting Test...");
+        $display("\n[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] Starting Cache System Test", $time / 10);
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] Test Sequence:", $time / 10);
+        $display("[%0d cycles]   1. Core 0 Read 0x100 (miss, fill cache)", $time / 10);
+        $display("[%0d cycles]   2. Core 1 Read 0x100 (hit, shared state)", $time / 10);
+        $display("[%0d cycles]   3. Core 0 Write 0x100 (invalidate Core 1)", $time / 10);
+        $display("[%0d cycles]   4. Core 1 Read 0x100 (probe Core 0, get new data)", $time / 10);
+        $display("[%0d cycles] ========================================\n", $time / 10);
         
         // Core 0 Read Address 0x100
-        $display("Sending Req to Core 0 (Read 0x100)...");
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] TEST: Core 0 Read from 0x100", $time / 10);
+        $display("[%0d cycles] ========================================", $time / 10);
         cpu_req[0] = 1;
         cpu_we[0] = 0;
         cpu_addr[0 +: 64] = 64'h100;
         
         wait(cpu_gnt[0]);
-        $display("Got Gnt from Core 0");
+        $display("[%0d cycles] CPU[0]: Request granted", $time / 10);
         #10;
         cpu_req[0] = 0;
         
         wait(cpu_rvalid[0]);
-        $display("Got RValid from Core 0");
-        $display("Core 0 Read Data: %h", cpu_rdata[0 +: 64]);
-        if (cpu_rdata[0 +: 64] !== 64'h20) $display("ERROR: Core 0 Read Mismatch!");
+        $display("[%0d cycles] CPU[0]: Response received", $time / 10);
+        $display("[%0d cycles] CPU[0]: Read Data = 0x%016h", $time / 10, cpu_rdata[0 +: 64]);
+        if (cpu_rdata[0 +: 64] !== 64'h20) begin
+            $display("[%0d cycles] ERROR: Core 0 Read Mismatch! Expected 0x20, got 0x%016h", 
+                     $time / 10, cpu_rdata[0 +: 64]);
+        end else begin
+            $display("[%0d cycles] PASS: Core 0 Read matches expected value", $time / 10);
+        end
 
         #100;
 
         // Core 1 Read Address 0x100 (Should be Shared)
-        $display("Sending Req to Core 1 (Read 0x100)...");
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] TEST: Core 1 Read from 0x100 (Shared)", $time / 10);
+        $display("[%0d cycles] ========================================", $time / 10);
         cpu_req[1] = 1;
         cpu_we[1] = 0;
         cpu_addr[1*64 +: 64] = 64'h100;
 
         wait(cpu_gnt[1]);
-        $display("Got Gnt from Core 1");
+        $display("[%0d cycles] CPU[1]: Request granted", $time / 10);
         #10;
         cpu_req[1] = 0;
 
         wait(cpu_rvalid[1]);
-        $display("Got RValid from Core 1");
-        $display("Core 1 Read Data: %h", cpu_rdata[1*64 +: 64]);
-        if (cpu_rdata[1*64 +: 64] !== 64'h20) $display("ERROR: Core 1 Read Mismatch!");
+        $display("[%0d cycles] CPU[1]: Response received", $time / 10);
+        $display("[%0d cycles] CPU[1]: Read Data = 0x%016h", $time / 10, cpu_rdata[1*64 +: 64]);
+        if (cpu_rdata[1*64 +: 64] !== 64'h20) begin
+            $display("[%0d cycles] ERROR: Core 1 Read Mismatch! Expected 0x20, got 0x%016h", 
+                     $time / 10, cpu_rdata[1*64 +: 64]);
+        end else begin
+            $display("[%0d cycles] PASS: Core 1 Read matches expected value (Shared state)", $time / 10);
+        end
 
         #100;
 
         // Core 0 Write Address 0x100 (Should Invalidate Core 1)
-        $display("Sending Req to Core 0 (Write 0x100 = 0xDEADBEEF)...");
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] TEST: Core 0 Write to 0x100 = 0xDEADBEEF", $time / 10);
+        $display("[%0d cycles]        (Should invalidate Core 1)", $time / 10);
+        $display("[%0d cycles] ========================================", $time / 10);
         cpu_req[0] = 1;
         cpu_we[0] = 1;
         cpu_addr[0 +: 64] = 64'h100;
@@ -210,30 +235,40 @@ module rv64g_cache_system_tb;
         cpu_be[0 +: 8] = 8'hFF;
 
         wait(cpu_gnt[0]);
-        $display("Got Gnt from Core 0");
+        $display("[%0d cycles] CPU[0]: Write request granted", $time / 10);
         #10;
         cpu_req[0] = 0;
         cpu_we[0] = 0;
 
         // Wait for write to complete (no explicit ack in this simple cpu interface, but we wait a bit)
+        $display("[%0d cycles] CPU[0]: Waiting for write to complete...", $time / 10);
         #200;
 
         // Core 1 Read Address 0x100 (Should Miss, Probe Core 0, Get New Data)
-        $display("Sending Req to Core 1 (Read 0x100)...");
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] TEST: Core 1 Read from 0x100", $time / 10);
+        $display("[%0d cycles]        (Should probe Core 0, get updated data)", $time / 10);
+        $display("[%0d cycles] ========================================", $time / 10);
         cpu_req[1] = 1;
         cpu_we[1] = 0;
         cpu_addr[1*64 +: 64] = 64'h100;
 
         wait(cpu_gnt[1]);
-        $display("Got Gnt from Core 1");
+        $display("[%0d cycles] CPU[1]: Request granted", $time / 10);
         #10;
         cpu_req[1] = 0;
 
         wait(cpu_rvalid[1]);
-        $display("Got RValid from Core 1");
-        $display("Core 1 Read Data: %h", cpu_rdata[1*64 +: 64]);
-        if (cpu_rdata[1*64 +: 64] !== 64'hDEADBEEF) $display("ERROR: Core 1 Read Mismatch (Coherence Fail)!");
-        else $display("SUCCESS: Coherence Test Passed!");
+        $display("[%0d cycles] CPU[1]: Response received", $time / 10);
+        $display("[%0d cycles] CPU[1]: Read Data = 0x%016h", $time / 10, cpu_rdata[1*64 +: 64]);
+        if (cpu_rdata[1*64 +: 64] !== 64'hDEADBEEF) begin
+            $display("[%0d cycles] ERROR: Coherence Test FAILED!", $time / 10);
+            $display("[%0d cycles]        Expected 0xDEADBEEF, got 0x%016h", $time / 10, cpu_rdata[1*64 +: 64]);
+        end else begin
+            $display("[%0d cycles] ========================================", $time / 10);
+            $display("[%0d cycles] SUCCESS: Coherence Test PASSED!", $time / 10);
+            $display("[%0d cycles] ========================================", $time / 10);
+        end
 
         #100;
         $finish;
