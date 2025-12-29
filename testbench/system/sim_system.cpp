@@ -1,13 +1,13 @@
 #include <verilated.h>
 #include <verilated_vcd_c.h>
-#include "Vrv64g_system_tb.h"
+#include "Vrv64g_cache_system_tb.h"
 
 int main(int argc, char** argv) {
     VerilatedContext* contextp = new VerilatedContext;
     contextp->commandArgs(argc, argv);
     contextp->traceEverOn(true);
     
-    Vrv64g_system_tb* top = new Vrv64g_system_tb{contextp};
+    Vrv64g_cache_system_tb* top = new Vrv64g_cache_system_tb{contextp};
     VerilatedVcdC* tfp = new VerilatedVcdC;
     top->trace(tfp, 99);
     tfp->open("obj_dir/wave_system.vcd");

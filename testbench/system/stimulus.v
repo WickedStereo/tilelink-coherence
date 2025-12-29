@@ -55,9 +55,53 @@ module stimulus #(
         forever #5 clk = ~clk;
     end
 
+    // Tasks for Driver
+    task automatic core_write;
+        input integer id;
+        input [63:0] addr;
+        input [63:0] data;
+        begin
+            @(posedge clk);
+            #1;
+            cpu_req[id]   = 1;
+            cpu_we[id]    = 1;
+            cpu_addr[id*64 +: 64] = addr;
+            cpu_wdata[id*64 +: 64] = data;
+            cpu_be[id*8 +: 8]     = 8'hFF;
+            
+            while (!cpu_gnt[id]) @(posedge clk);
+            
+            #1;
+            cpu_req[id]   = 0;
+            cpu_we[id]    = 0;
+        end
+    endtask
+
+    task automatic core_read;
+        input integer id;
+        input [63:0] addr;
+        output [63:0] data;
+        begin
+            @(posedge clk);
+            #1;
+            cpu_req[id]   = 1;
+            cpu_we[id]    = 0;
+            cpu_addr[id*64 +: 64] = addr;
+            
+            while (!cpu_gnt[id]) @(posedge clk);
+            
+            #1;
+            cpu_req[id]   = 0;
+            
+            while (!cpu_rvalid[id]) @(posedge clk);
+            data = cpu_rdata[id*64 +: 64];
+        end
+    endtask
+
     // Memory Responder (Simple RAM)
     reg [63:0] memory [0:65535]; // Larger memory for eviction test
     integer i;
+    reg [63:0] read_val; // For task outputs
     
     initial begin
         for (i=0; i<65536; i=i+1) memory[i] = i; // Init with index
@@ -176,30 +220,13 @@ module stimulus #(
         // Core 1 writes 0xBBBB
         // Simultaneously
         
-        cpu_req[0] = 1;
-        cpu_we[0] = 1;
-        cpu_addr[0 +: 64] = 64'h200;
-        cpu_wdata[0 +: 64] = 64'hAAAA;
-        cpu_be[0 +: 8] = 8'hFF;
-
-        cpu_req[1] = 1;
-        cpu_we[1] = 1;
-        cpu_addr[1*64 +: 64] = 64'h200;
-        cpu_wdata[1*64 +: 64] = 64'hBBBB;
-        cpu_be[1*8 +: 8] = 8'hFF;
-
-        // Wait for both to finish
         fork
             begin
-                wait(cpu_gnt[0]);
-                cpu_req[0] = 0;
-                cpu_we[0] = 0;
+                core_write(0, 64'h200, 64'hAAAA);
                 $display("Core 0 Granted");
             end
             begin
-                wait(cpu_gnt[1]);
-                cpu_req[1] = 0;
-                cpu_we[1] = 0;
+                core_write(1, 64'h200, 64'hBBBB);
                 $display("Core 1 Granted");
             end
         join
@@ -207,16 +234,10 @@ module stimulus #(
         #200; // Wait for coherence to settle
 
         // Read back from Core 2 (Neutral observer)
-        cpu_req[2] = 1;
-        cpu_we[2] = 0;
-        cpu_addr[2*64 +: 64] = 64'h200;
+        core_read(2, 64'h200, read_val);
         
-        wait(cpu_gnt[2]);
-        cpu_req[2] = 0;
-        
-        wait(cpu_rvalid[2]);
-        $display("Core 2 Read Data: %h", cpu_rdata[2*64 +: 64]);
-        if (cpu_rdata[2*64 +: 64] == 64'hAAAA || cpu_rdata[2*64 +: 64] == 64'hBBBB) begin
+        $display("Core 2 Read Data: %h", read_val);
+        if (read_val == 64'hAAAA || read_val == 64'hBBBB) begin
             $display("PASS: Write Contention resolved (Last Writer Wins)");
         end else begin
             $display("FAIL: Write Contention failed. Expected AAAA or BBBB");
@@ -233,20 +254,10 @@ module stimulus #(
         
         for (i=0; i<16; i=i+1) begin
             // Core 0 Reads
-            cpu_req[0] = 1;
-            cpu_we[0] = 0;
-            cpu_addr[0 +: 64] = (i << 14); // 0, 16K, 32K...
-            wait(cpu_gnt[0]);
-            cpu_req[0] = 0;
-            wait(cpu_rvalid[0]);
+            core_read(0, (i << 14), read_val);
             
             // Core 1 Reads (Make it Shared)
-            cpu_req[1] = 1;
-            cpu_we[1] = 0;
-            cpu_addr[1*64 +: 64] = (i << 14);
-            wait(cpu_gnt[1]);
-            cpu_req[1] = 0;
-            wait(cpu_rvalid[1]);
+            core_read(1, (i << 14), read_val);
         end
         
         $display("Set 0 Filled with 16 Shared Lines");
@@ -256,13 +267,7 @@ module stimulus #(
         // Since they are Shared, L2 must Probe Core 0 and Core 1
         
         $display("Accessing 17th line (forcing eviction)...");
-        cpu_req[0] = 1;
-        cpu_we[0] = 0;
-        cpu_addr[0 +: 64] = (16 << 14); // 17th line
-        
-        wait(cpu_gnt[0]);
-        cpu_req[0] = 0;
-        wait(cpu_rvalid[0]);
+        core_read(0, (16 << 14), read_val);
         
         $display("PASS: Eviction completed without hang");
         

@@ -8,7 +8,7 @@
 `include "rtl/l2/rv64g_l2_fsm.v"
 `include "rtl/l2/rv64g_l2_mshr.v"
 `include "rtl/l2/rv64g_l2_plru.v"
-`include "rtl/system/rv64g_system.v"
+`include "rtl/system/rv64g_cache_system.v"
 `include "rtl/xbar/tl_arbiter.v"
 `include "rtl/xbar/tl_demux.v"
 `include "rtl/xbar/tl_socket_m1.v"

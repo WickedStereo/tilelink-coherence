@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module rv64g_system_tb;
+module rv64g_cache_system_tb;
 
     parameter CORES = 4;
     parameter ADDR_W = 64;
@@ -42,7 +42,7 @@ module rv64g_system_tb;
     wire         mem_d_ready;
 
     // DUT
-    rv64g_system #(
+    rv64g_cache_system #(
         .CORES(CORES)
     ) dut (
         .clk_i(clk),

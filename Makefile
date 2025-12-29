@@ -194,10 +194,10 @@ help:
 
 # System Verilator targets
 SYSTEM_TB_DIR := $(TB_DIR)/system
-SYSTEM_TB := $(SYSTEM_TB_DIR)/rv64g_system_tb.v
+SYSTEM_TB := $(SYSTEM_TB_DIR)/rv64g_cache_system_tb.v
 SYSTEM_CPP := $(SYSTEM_TB_DIR)/sim_system.cpp
 SYSTEM_RTL := \
-$(RTL_DIR)/system/rv64g_system.v \
+$(RTL_DIR)/system/rv64g_cache_system.v \
 $(RTL_DIR)/l1/rv64g_l1_dcache.v \
 $(RTL_DIR)/l1/rv64g_l1_arrays.v \
 $(RTL_DIR)/l1/rv64g_l1_plru.v \
@@ -215,13 +215,13 @@ verilate_system: clean_verilator
 	$(VERILATOR) $(VERILATOR_FLAGS) $(SYSTEM_CPP) $(SYSTEM_TB) $(SYSTEM_RTL) $(L1_PARAMS)
 
 build_system: verilate_system
-	$(MAKE) -C obj_dir -f Vrv64g_system_tb.mk Vrv64g_system_tb
+	$(MAKE) -C obj_dir -f Vrv64g_cache_system_tb.mk Vrv64g_cache_system_tb
 
 run_system: build_system
-	obj_dir/Vrv64g_system_tb
+	obj_dir/Vrv64g_cache_system_tb
 
 # System Stress Test
-SYSTEM_STRESS_TB := $(SYSTEM_TB_DIR)/rv64g_system_stress_tb.v
+SYSTEM_STRESS_TB := $(SYSTEM_TB_DIR)/rv64g_cache_system_stress_tb.v
 SYSTEM_STIMULUS := $(SYSTEM_TB_DIR)/stimulus.v
 SYSTEM_STRESS_CPP := $(SYSTEM_TB_DIR)/sim_system_stress.cpp
 
@@ -229,7 +229,7 @@ verilate_system_stress: clean_verilator
 	$(VERILATOR) $(VERILATOR_FLAGS) $(SYSTEM_STRESS_CPP) $(SYSTEM_STRESS_TB) $(SYSTEM_STIMULUS) $(SYSTEM_RTL) $(L1_PARAMS)
 
 build_system_stress: verilate_system_stress
-	$(MAKE) -C obj_dir -f Vrv64g_system_stress_tb.mk Vrv64g_system_stress_tb
+	$(MAKE) -C obj_dir -f Vrv64g_cache_system_stress_tb.mk Vrv64g_cache_system_stress_tb
 
 run_system_stress: build_system_stress
-	obj_dir/Vrv64g_system_stress_tb
+	obj_dir/Vrv64g_cache_system_stress_tb

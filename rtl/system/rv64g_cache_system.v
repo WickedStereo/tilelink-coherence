@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module rv64g_system #(
+module rv64g_cache_system #(
     parameter CORES = 4,
     parameter ADDR_W = 64,
     parameter DATA_W = 64,
