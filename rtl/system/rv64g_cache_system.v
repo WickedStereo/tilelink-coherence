@@ -111,7 +111,7 @@ module rv64g_cache_system #(
     wire          l2_b_valid;
     wire          l2_b_ready;
     wire [2:0]    l2_b_opcode;
-    wire [1:0]    l2_b_param;
+    wire [2:0]    l2_b_param;
     wire [3:0]    l2_b_size;
     wire [SOURCE_W-1:0] l2_b_source;
     wire [ADDR_W-1:0]   l2_b_address;
@@ -140,6 +140,8 @@ module rv64g_cache_system #(
     wire          l2_d_corrupt;
 
     wire          l2_e_ready;
+    wire          l2_e_valid;
+    wire [SINK_W-1:0] l2_e_sink;
 
     // Unused Manager Interface Signals
     wire [3:0]    unused_l2_a_size;
@@ -148,8 +150,7 @@ module rv64g_cache_system #(
     wire          unused_l2_a_corrupt;
     wire [3:0]    unused_l2_c_size;
     wire          unused_l2_c_corrupt;
-    wire          unused_l2_e_valid;
-    wire [SINK_W-1:0] unused_l2_e_sink;
+    // (removed unused E wires)
 
     genvar i;
     generate
@@ -322,9 +323,9 @@ module rv64g_cache_system #(
         .mgr_d_data_i(l2_d_data),
         .mgr_d_corrupt_i(l2_d_corrupt),
 
-        .mgr_e_valid_o(unused_l2_e_valid),
+        .mgr_e_valid_o(l2_e_valid),
         .mgr_e_ready_i(l2_e_ready),
-        .mgr_e_sink_o(unused_l2_e_sink)
+        .mgr_e_sink_o(l2_e_sink)
     );
 
     // L2 Cache
@@ -338,9 +339,6 @@ module rv64g_cache_system #(
     assign l2_d_size = 4'd6; // 64 bytes
     assign l2_d_denied = 1'b0;
     assign l2_d_corrupt = 1'b0;
-
-    // Sink E channel from Xbar (L2 doesn't use it)
-    assign l2_e_ready = 1'b1;
 
     rv64g_l2_cache #(
         .CORES(CORES),
@@ -379,6 +377,10 @@ module rv64g_cache_system #(
         .tl_d_sink_o(l2_d_sink),
         .tl_d_valid_o(l2_d_valid),
         .tl_d_ready_i(l2_d_ready),
+
+        .tl_e_valid_i(l2_e_valid),
+        .tl_e_sink_i(l2_e_sink[1:0]),
+        .tl_e_ready_o(l2_e_ready),
 
         .mem_a_opcode_o(mem_a_opcode_o),
         .mem_a_param_o(mem_a_param_o),

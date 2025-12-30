@@ -24,7 +24,7 @@ module rv64g_l2_fsm #(
 
     // TileLink B Channel (Source) - Probes
     output reg  [2:0]   b_opcode_o,
-    output reg  [1:0]   b_param_o,
+    output reg  [2:0]   b_param_o,
     output reg  [63:0]  b_address_o,
     output reg          b_valid_o,
     input  wire         b_ready_i,
@@ -47,6 +47,11 @@ module rv64g_l2_fsm #(
     output reg  [1:0]   d_sink_o,
     output reg          d_valid_o,
     input  wire         d_ready_i,
+
+    // TileLink E Channel (Sink) - GrantAck
+    input  wire         e_valid_i,
+    input  wire [1:0]   e_sink_i,
+    output reg          e_ready_o,
 
     // Memory Interface (TL-UH)
     // A Channel (Source)
@@ -127,11 +132,20 @@ module rv64g_l2_fsm #(
     localparam ST_MEM_READ   = 4'd8; // Read from Memory (Refill)
     localparam ST_MEM_WRITE  = 4'd9; // Write to Memory (Writeback)
     localparam ST_MEM_RESP   = 4'd10; // Wait for Writeback Ack
+    localparam ST_REL_DATA   = 4'd11; // Receive ReleaseData beats
+    localparam ST_WAIT_E     = 4'd12; // Wait for GrantAck
 
-    reg [3:0] next_state, state_q;
+reg [3:0] next_state, state_q;
     reg [2:0] burst_cnt; // Burst Counter for Memory Access
     reg [2:0] probe_data_cnt; // Counter for ProbeAckData beats
-    reg mem_req_sent_q; // Flag to track if Memory Request (Get) was sent
+reg mem_req_sent_q; // Flag to track if Memory Request (Get) was sent
+reg e_seen_q, e_seen_n;
+reg [CID_W-1:0] probe_ack_id;
+    reg [2:0] rel_data_cnt_q, rel_data_cnt_n;
+    reg rel_has_data_q, rel_has_data_n;
+    reg rel_buf_valid_q, rel_buf_valid_n;
+    reg [63:0] rel_buf_data_q, rel_buf_data_n;
+    reg rel_drop_q, rel_drop_n;
 
     // Latched Request
     reg [63:0] req_addr_q;
@@ -140,7 +154,8 @@ module rv64g_l2_fsm #(
     reg [2:0]  req_param_q;
     reg [SOURCE_W-1:0]  req_source_q;
 
-    wire [CID_W-1:0] req_core_id = req_source_q[SOURCE_W-1 -: CID_W];
+wire [CID_W-1:0] req_core_id = req_source_q[SOURCE_W-1 -: CID_W];
+wire [CID_W-1:0] c_core_id = c_source_i[SOURCE_W-1 -: CID_W];
 
     // Hit Logic
     reg hit;
@@ -331,7 +346,7 @@ module rv64g_l2_fsm #(
         a_ready_o = 1'b0;
         b_valid_o = 1'b0;
         b_opcode_o = 3'd6; // ProbeBlock
-        b_param_o = 2'd0; // To N
+        b_param_o = 3'd0; // To N
         b_address_o = req_addr_q;
         b_dest_o = 0;
         d_valid_o = 1'b0;
@@ -367,8 +382,20 @@ module rv64g_l2_fsm #(
         mshr_set_probes_o = {CORES{1'b0}};
         mshr_probe_ack_o = 1'b0;
         mshr_probe_ack_id_o = 0;
+        probe_ack_id = {CID_W{1'b0}};
+
+        rel_data_cnt_n = rel_data_cnt_q;
+        rel_has_data_n = rel_has_data_q;
+        rel_buf_valid_n = rel_buf_valid_q;
+        rel_buf_data_n = rel_buf_data_q;
+        rel_drop_n = rel_drop_q;
         
         c_ready_o = 1'b0;
+        e_ready_o = 1'b1;
+        e_seen_n = e_seen_q;
+        if (e_valid_i) begin
+            e_seen_n = 1'b1;
+        end
         
         plru_access = 1'b0;
         plru_used_way = 4'd0;
@@ -389,25 +416,30 @@ module rv64g_l2_fsm #(
             if (c_is_probe_ack) begin
                 // Always accept ProbeAck
                 c_ready_o = 1'b1;
-                // Map Source ID to Core ID. Assuming Source[1:0] is Core ID.
-                mshr_probe_ack_id_o = c_source_i[SOURCE_W-1 -: CID_W];
-                
-                if (c_opcode_i == C_PROBE_ACK_DATA) begin
-                    // Write Data
-                    data_we_o = 1'b1;
-                    data_way_o = (latched_hit) ? latched_hit_way : victim_way_q;
-                    data_set_o = req_addr_q[13:6];
-                    data_word_sel_o = probe_data_cnt; 
-                    data_wdata_o = c_data_i;
+                probe_ack_id = c_core_id;
+                mshr_probe_ack_id_o = probe_ack_id;
 
-                    // Only signal MSHR on last beat
-                    if (probe_data_cnt == 3'd7) begin
-                        mshr_probe_ack_o = 1'b1;
+                if (mshr_pending_probes_i[probe_ack_id]) begin
+                    if (c_opcode_i == C_PROBE_ACK_DATA) begin
+                        // Write Data
+                        data_we_o = 1'b1;
+                        data_way_o = (latched_hit) ? latched_hit_way : victim_way_q;
+                        data_set_o = req_addr_q[13:6];
+                        data_word_sel_o = probe_data_cnt; 
+                        data_wdata_o = c_data_i;
+
+                        // Only signal MSHR on last beat
+                        if (probe_data_cnt == 3'd7) begin
+                            mshr_probe_ack_o = 1'b1;
+                        end else begin
+                            mshr_probe_ack_o = 1'b0;
+                        end
                     end else begin
-                        mshr_probe_ack_o = 1'b0;
+                        mshr_probe_ack_o = 1'b1;
                     end
                 end else begin
-                    mshr_probe_ack_o = 1'b1;
+                    // Unexpected ProbeAck; ignore for state updates
+                    mshr_probe_ack_o = 1'b0;
                 end
             end else if (c_is_release) begin
                 // Handle Release
@@ -443,14 +475,21 @@ module rv64g_l2_fsm #(
 
         case (state_q)
             ST_IDLE: begin
-                a_ready_o = !mshr_busy_i;
-                
                 if (c_valid_i && c_is_release) begin
-                    c_ready_o = 1'b1; // Accept Release
+                    c_ready_o = 1'b1; // Accept Release (beat 0)
+                    a_ready_o = 1'b0; // Block A handshake on same cycle
                     next_state = ST_RAM_WAIT;
-                end else if (a_valid_i && !mshr_busy_i) begin
-                    mshr_alloc_o = 1'b1;
-                    next_state = ST_RAM_WAIT;
+                    rel_has_data_n = (c_opcode_i == C_RELEASE_DATA);
+                    rel_buf_valid_n = (c_opcode_i == C_RELEASE_DATA);
+                    rel_buf_data_n = c_data_i;
+                    rel_data_cnt_n = 3'd0;
+                    rel_drop_n = 1'b0;
+                end else begin
+                    a_ready_o = !mshr_busy_i;
+                    if (a_valid_i && !mshr_busy_i) begin
+                        mshr_alloc_o = 1'b1;
+                        next_state = ST_RAM_WAIT;
+                    end
                 end
             end
 
@@ -463,18 +502,20 @@ module rv64g_l2_fsm #(
                 if (processing_release) begin
                     // Release Handling
                     if (hit) begin
-                        // If ReleaseData, write data
-                        if (req_opcode_q == C_RELEASE_DATA) begin
-                            data_we_o = 1'b1;
-                            data_way_o = hit_way;
-                            data_set_o = req_addr_q[13:6];
-                            data_word_sel_o = req_addr_q[5:3]; // Use address offset
-                            data_wdata_o = req_data_q; // Use latched data
+                        if (rel_has_data_q) begin
+                            next_state = ST_REL_DATA;
+                            rel_drop_n = 1'b0;
+                        end else begin
+                            next_state = ST_UPDATE;
                         end
-                        next_state = ST_UPDATE;
                     end else begin
-                        // Miss on Release? Just Ack.
-                        next_state = ST_GRANT; 
+                        // Miss on Release? Drain data if present, then Ack.
+                        if (rel_has_data_q) begin
+                            next_state = ST_REL_DATA;
+                            rel_drop_n = 1'b1;
+                        end else begin
+                            next_state = ST_GRANT; 
+                        end
                     end
                 end else begin
                     // Acquire Handling
@@ -492,16 +533,16 @@ module rv64g_l2_fsm #(
                                 b_address_o = req_addr_q;
                                 if (req_opcode_q == 3'd7) begin // AcquirePerm
                                     b_opcode_o = 3'd7; // B_PROBE_PERM (Invalidate)
-                                    b_param_o = 2'd0; // To N
+                                    b_param_o = 3'd0; // To N
                                 end else begin
                                     b_opcode_o = 3'd6; // B_PROBE (Downgrade)
-                                    b_param_o = 2'd1; // To B (Shared)
+                                    b_param_o = 3'd1; // To B (Shared)
                                 end
                             end else begin
                                 // Eviction
                                 b_address_o = {tag_way_flat_i[plru_victim_way*50 +: 50], req_addr_q[13:6], 6'b0};
                                 b_opcode_o = 3'd6; // B_PROBE (Invalidate)
-                                b_param_o = 2'd2; // To N (Invalidate)
+                                b_param_o = 3'd2; // To N (Invalidate)
                             end
                         end
                         
@@ -587,6 +628,37 @@ module rv64g_l2_fsm #(
                 if (mem_d_valid_i) begin
                     // AccessAck
                     next_state = ST_MEM_READ; // Proceed to refill
+                end
+            end
+
+            ST_REL_DATA: begin
+                // Drain ReleaseData beats (beat 0 buffered in req_data_q)
+                c_ready_o = !rel_buf_valid_q;
+
+                if (rel_buf_valid_q) begin
+                    if (!rel_drop_q) begin
+                        data_we_o = 1'b1;
+                        data_way_o = latched_hit_way;
+                        data_set_o = req_addr_q[13:6];
+                        data_word_sel_o = 3'd0;
+                        data_wdata_o = rel_buf_data_q;
+                    end
+                    rel_buf_valid_n = 1'b0;
+                    rel_data_cnt_n = 3'd1;
+                end else if (c_valid_i && c_ready_o) begin
+                    if (!rel_drop_q) begin
+                        data_we_o = 1'b1;
+                        data_way_o = latched_hit_way;
+                        data_set_o = req_addr_q[13:6];
+                        data_word_sel_o = rel_data_cnt_q;
+                        data_wdata_o = c_data_i;
+                    end
+
+                    if (rel_data_cnt_q == 3'd7) begin
+                        next_state = latched_hit ? ST_UPDATE : ST_GRANT;
+                    end else begin
+                        rel_data_cnt_n = rel_data_cnt_q + 3'd1;
+                    end
                 end
             end
 
@@ -684,6 +756,13 @@ module rv64g_l2_fsm #(
                         dir_wr_owner_id_o = req_core_id;
                         dir_wr_dirty_o = 1'b1;
                     end
+                    next_state = ST_WAIT_E;
+                end
+            end
+
+            ST_WAIT_E: begin
+                // Wait for GrantAck before completing the transaction
+                if (e_seen_q || e_valid_i) begin
                     next_state = ST_COMPLETE;
                 end
             end
@@ -710,11 +789,25 @@ module rv64g_l2_fsm #(
             burst_cnt <= 3'd0;
             probe_data_cnt <= 3'd0;
             mem_req_sent_q <= 1'b0;
+            e_seen_q <= 1'b0;
+            rel_data_cnt_q <= 3'd0;
+            rel_has_data_q <= 1'b0;
+            rel_buf_valid_q <= 1'b0;
+            rel_buf_data_q <= 64'd0;
+            rel_drop_q <= 1'b0;
+            processing_release <= 1'b0;
         end else begin
             state_q <= next_state;
+            e_seen_q <= e_seen_n;
+            rel_data_cnt_q <= rel_data_cnt_n;
+            rel_has_data_q <= rel_has_data_n;
+            rel_buf_valid_q <= rel_buf_valid_n;
+            rel_buf_data_q <= rel_buf_data_n;
+            rel_drop_q <= rel_drop_n;
 
             // Probe Data Counter Logic
-            if (c_valid_i && c_ready_o && c_opcode_i == C_PROBE_ACK_DATA) begin
+            if (c_valid_i && c_ready_o && c_opcode_i == C_PROBE_ACK_DATA &&
+                mshr_pending_probes_i[c_core_id]) begin
                 probe_data_cnt <= probe_data_cnt + 1;
             end else if (state_q == ST_IDLE) begin
                 probe_data_cnt <= 3'd0;
@@ -751,12 +844,14 @@ module rv64g_l2_fsm #(
                     req_param_q <= c_param_i;
                     req_source_q <= c_source_i;
                     processing_release <= 1'b1;
+                    e_seen_q <= 1'b0;
                 end else if (a_valid_i && a_ready_o) begin
                     req_addr_q <= a_address_i;
                     req_opcode_q <= a_opcode_i;
                     req_param_q <= a_param_i;
                     req_source_q <= a_source_i;
                     processing_release <= 1'b0;
+                    e_seen_q <= 1'b0;
                 end
             end
 

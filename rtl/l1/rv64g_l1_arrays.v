@@ -1,4 +1,4 @@
-// rv64g_l1_arrays.v - Data/tag/valid/dirty arrays for L1 cache
+// rv64g_l1_arrays.v - Data/tag/state arrays for L1 cache
 `timescale 1ns/1ps
 `include "params.vh"
 

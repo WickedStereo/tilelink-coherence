@@ -179,6 +179,7 @@ module rv64g_l1_dcache (
 	reg [63:0]        pend_wdata_q, pend_wdata_n;           // Pending write data
 	reg [7:0]         pend_be_q, pend_be_n;                 // Pending byte enables
 	reg [TAG_W-1:0]   pend_evict_tag_q, pend_evict_tag_n;   // Pending evict tag
+	reg [1:0]         pend_evict_state_q, pend_evict_state_n; // Pending evict state
 	reg [63:0]        rdata_beat_q, rdata_beat_n;           // Data beat for refill
 	reg [3:0]         pend_sink_q, pend_sink_n;             // Pending Grant sink
 	reg               pend_is_probe_q, pend_is_probe_n;     // Pending is probe response
@@ -288,6 +289,7 @@ module rv64g_l1_dcache (
 		pend_wdata_n     = pend_wdata_q;
 		pend_be_n        = pend_be_q;
 		pend_evict_tag_n = pend_evict_tag_q;
+		pend_evict_state_n = pend_evict_state_q;
 		rdata_beat_n  = rdata_beat_q;
 		pend_sink_n   = pend_sink_q;
 		pend_is_probe_n = pend_is_probe_q;
@@ -471,6 +473,7 @@ module rv64g_l1_dcache (
 				pend_is_store_n = 1'b0;
 				pend_evict_tag_n = arr_tag_way_flat[(((victim_way+1)*TAG_W)-1) -: TAG_W];
 				beat_n        = 3'd0;
+				pend_evict_state_n = arr_state_way_flat[victim_way*2 +: 2];
 				if (arr_valid_way[victim_way] && arr_dirty_way[victim_way]) begin
 					state_n = S_WB_REQ;
 					pend_is_probe_n = 1'b0;
@@ -480,6 +483,10 @@ module rv64g_l1_dcache (
                     arr_word_sel = 3'd0;
                     arr_way_sel = victim_way;
                     tl_c_data_n = arr_rdata_sel;
+				end else if (arr_valid_way[victim_way]) begin
+					state_n = S_WB_REQ;
+					pend_is_probe_n = 1'b0;
+					pend_has_data_n = 1'b0;
 				end else begin
 					state_n = S_REF_REQ;
 				end
@@ -495,6 +502,7 @@ module rv64g_l1_dcache (
 				pend_be_n      = be_i;
 				pend_evict_tag_n = arr_tag_way_flat[(((victim_way+1)*TAG_W)-1) -: TAG_W];
 				beat_n         = 3'd0;
+				pend_evict_state_n = arr_state_way_flat[victim_way*2 +: 2];
 				if (arr_valid_way[victim_way] && arr_dirty_way[victim_way]) begin
 					state_n = S_WB_REQ;
 					pend_is_probe_n = 1'b0;
@@ -504,6 +512,10 @@ module rv64g_l1_dcache (
                     arr_word_sel = 3'd0;
                     arr_way_sel = victim_way;
                     tl_c_data_n = arr_rdata_sel;
+				end else if (arr_valid_way[victim_way]) begin
+					state_n = S_WB_REQ;
+					pend_is_probe_n = 1'b0;
+					pend_has_data_n = 1'b0;
 				end else begin
 					state_n = S_REF_REQ;
 				end
@@ -521,10 +533,11 @@ module rv64g_l1_dcache (
 			tl_a_address_n = {pend_tag_q, pend_index_q, 6'b0};
 			tl_a_mask_n = 8'hFF;
 			
-			if (tl_a_ready_i) begin
-				state_n = S_REF_WAIT;
-			end
-		end
+            if (tl_a_ready_i && tl_a_valid_o) begin
+                tl_a_valid_n = 1'b0;
+                state_n = S_REF_WAIT;
+            end
+        end
 
 		S_PERM_REQ: begin
 			// Issue AcquirePerm
@@ -536,10 +549,11 @@ module rv64g_l1_dcache (
 			tl_a_address_n = {pend_tag_q, pend_index_q, 6'b0};
 			tl_a_mask_n = 8'hFF;
 			
-			if (tl_a_ready_i) begin
-				state_n = S_REF_WAIT;
-			end
-		end
+            if (tl_a_ready_i && tl_a_valid_o) begin
+                tl_a_valid_n = 1'b0;
+                state_n = S_REF_WAIT;
+            end
+        end
 
 		S_REF_WAIT: begin
             // Handle Probe
@@ -585,8 +599,8 @@ module rv64g_l1_dcache (
             end else begin
 			// Wait for GrantData or Grant
 			tl_d_ready_n = 1'b1;
-			if (tl_d_valid_i) begin
-				if (tl_d_opcode_i == D_GRANT_DATA) begin
+            if (tl_d_valid_i && tl_d_ready_o) begin
+                if (tl_d_opcode_i == D_GRANT_DATA) begin
 					// Write received beat into arrays
 					arr_word_sel  = beat_q;
 					arr_way_sel   = pend_victim_q;
@@ -629,7 +643,8 @@ module rv64g_l1_dcache (
 			// Send GrantAck
 			tl_e_valid_n = 1'b1;
 			tl_e_sink_n = pend_sink_q;
-			if (tl_e_ready_i) begin
+			if (tl_e_ready_i && tl_e_valid_o) begin
+				tl_e_valid_n = 1'b0;
 				state_n = S_RESP;
 			end
 		end
@@ -652,25 +667,32 @@ module rv64g_l1_dcache (
 				end
 			end else begin
 				// Voluntary Eviction
-				tl_c_opcode_n = C_RELEASE_DATA;
-				tl_c_param_n = TtoN; // Assume T/TT to N
 				tl_c_address_n = {pend_evict_tag_q, pend_index_q, 6'b0};
+				if (pend_has_data_q) begin
+					tl_c_opcode_n = C_RELEASE_DATA;
+					tl_c_param_n = TtoN; // Dirty eviction
+				end else begin
+					tl_c_opcode_n = C_RELEASE;
+					case (pend_evict_state_q)
+						MESI_B:  tl_c_param_n = BtoN;
+						MESI_T:  tl_c_param_n = TtoN;
+						MESI_TT: tl_c_param_n = TtoN;
+						default: tl_c_param_n = NtoN;
+					endcase
+				end
 			end
 			
 			// Prepare data for NEXT beat if advancing, or CURRENT beat if stalling
-			if (pend_has_data_q) begin
-				arr_way_sel = pend_victim_q;
-                if (tl_c_ready_i) begin
-                    arr_word_sel = beat_q + 3'd1;
-                end else begin
-                    arr_word_sel = beat_q;
-                end
-				tl_c_data_n = arr_rdata_sel;
-			end
+            if (pend_has_data_q) begin
+                arr_way_sel = pend_victim_q;
+                arr_word_sel = beat_q;
+                tl_c_data_n = arr_rdata_sel;
+            end
 
-			if (tl_c_ready_i) begin
-				if (pend_has_data_q) begin
-					if (beat_q == 3'd7) begin
+            if (tl_c_ready_i && tl_c_valid_o) begin
+                if (pend_has_data_q) begin
+                    if (beat_q == 3'd7) begin
+                        tl_c_valid_n = 1'b0;
 						beat_n = 3'd0;
 						if (pend_is_probe_q) begin
 							state_n = S_IDLE; // ProbeAckData done (no Ack expected)
@@ -683,6 +705,7 @@ module rv64g_l1_dcache (
 					end
 				end else begin
 					// No data (ProbeAck or Release)
+                    tl_c_valid_n = 1'b0;
 					if (pend_is_probe_q) begin
 						state_n = S_IDLE; // ProbeAck done
 					end else begin
@@ -709,17 +732,14 @@ module rv64g_l1_dcache (
 				tl_c_address_n = {pend_evict_tag_q, pend_index_q, 6'b0};
 			end
 
-			arr_way_sel = pend_victim_q;
-            if (tl_c_ready_i) begin
-                arr_word_sel = beat_q + 3'd1;
-            end else begin
-                arr_word_sel = beat_q;
-            end
-			tl_c_data_n = arr_rdata_sel;
+            arr_way_sel = pend_victim_q;
+            arr_word_sel = beat_q;
+            tl_c_data_n = arr_rdata_sel;
 
-			if (tl_c_ready_i) begin
-				if (beat_q == 3'd7) begin
-					beat_n = 3'd0;
+            if (tl_c_ready_i && tl_c_valid_o) begin
+                if (beat_q == 3'd7) begin
+                    tl_c_valid_n = 1'b0;
+                    beat_n = 3'd0;
 					if (pend_is_probe_q) begin
 						state_n = S_IDLE;
 					end else begin
@@ -736,7 +756,7 @@ module rv64g_l1_dcache (
 		S_WB_WAIT: begin
 			// Wait for ReleaseAck
 			tl_d_ready_n = 1'b1;
-			if (tl_d_valid_i && (tl_d_opcode_i == D_RELEASE_ACK)) begin
+			if (tl_d_valid_i && tl_d_ready_o && (tl_d_opcode_i == D_RELEASE_ACK)) begin
 				if (pend_is_probe_q) begin
 					// Should not happen for ProbeAck
 					state_n = S_IDLE;
@@ -766,22 +786,20 @@ module rv64g_l1_dcache (
 				tl_c_data_n = arr_rdata_sel;
 				arr_way_sel  = probe_pend_way_q;
                 
-                if (tl_c_ready_i) begin
-                    arr_word_sel = beat_q + 3'd1; // Prefetch next
-                end else begin
-                    arr_word_sel = beat_q;
-                end
-				
-				if (tl_c_ready_i) begin
-					if (beat_q == 3'd7) begin
-						beat_n = 3'd0;
+                arr_word_sel = beat_q;
+                
+                if (tl_c_ready_i && tl_c_valid_o) begin
+                    if (beat_q == 3'd7) begin
+                        tl_c_valid_n = 1'b0;
+                        beat_n = 3'd0;
 						state_n = return_state_q;
 					end else begin
 						beat_n = beat_q + 3'd1;
 					end
 				end
 			end else begin
-				if (tl_c_ready_i) begin
+				if (tl_c_ready_i && tl_c_valid_o) begin
+                    tl_c_valid_n = 1'b0;
 					state_n = return_state_q;
 				end
 			end
@@ -832,6 +850,7 @@ module rv64g_l1_dcache (
 			pend_wdata_q <= 64'd0;
 			pend_be_q <= 8'd0;
 			pend_evict_tag_q <= {TAG_W{1'b0}};
+			pend_evict_state_q <= 2'd0;
 			pend_sink_q <= 4'd0;
 			pend_is_probe_q <= 1'b0;
 			pend_probe_param_q <= 3'd0;
@@ -861,6 +880,7 @@ module rv64g_l1_dcache (
 			pend_wdata_q <= pend_wdata_n;
 			pend_be_q <= pend_be_n;
 			pend_evict_tag_q <= pend_evict_tag_n;
+			pend_evict_state_q <= pend_evict_state_n;
 			pend_sink_q <= pend_sink_n;
 			pend_is_probe_q <= pend_is_probe_n;
 			pend_probe_param_q <= pend_probe_param_n;
@@ -964,5 +984,3 @@ module rv64g_l1_dcache (
 	end
 
 endmodule
-
-

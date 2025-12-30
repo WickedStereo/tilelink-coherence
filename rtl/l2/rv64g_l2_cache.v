@@ -24,7 +24,7 @@ module rv64g_l2_cache #(
 
     // TileLink B Channel (Source) - Probes
     output wire [2:0]   tl_b_opcode_o,
-    output wire [1:0]   tl_b_param_o,
+    output wire [2:0]   tl_b_param_o,
     output wire [ADDR_W-1:0]  tl_b_address_o,
     output wire         tl_b_valid_o,
     input  wire         tl_b_ready_i,
@@ -47,6 +47,11 @@ module rv64g_l2_cache #(
     output wire [1:0]   tl_d_sink_o,
     output wire         tl_d_valid_o,
     input  wire         tl_d_ready_i,
+
+    // TileLink E Channel (Sink) - GrantAck
+    input  wire         tl_e_valid_i,
+    input  wire [1:0]   tl_e_sink_i,
+    output wire         tl_e_ready_o,
 
     // Memory Interface (TL-UH)
     // A Channel (Source)
@@ -169,6 +174,11 @@ module rv64g_l2_cache #(
         .d_sink_o(tl_d_sink_o),
         .d_valid_o(tl_d_valid_o),
         .d_ready_i(tl_d_ready_i),
+
+        // TileLink E
+        .e_valid_i(tl_e_valid_i),
+        .e_sink_i(tl_e_sink_i),
+        .e_ready_o(tl_e_ready_o),
 
         // Memory Interface
         .mem_a_opcode_o(mem_a_opcode_o),
