@@ -531,12 +531,12 @@ wire [CID_W-1:0] c_core_id = c_source_i[SOURCE_W-1 -: CID_W];
                             
                             if (hit) begin
                                 b_address_o = req_addr_q;
-                                if (req_opcode_q == 3'd7) begin // AcquirePerm
-                                    b_opcode_o = 3'd7; // B_PROBE_PERM (Invalidate)
-                                    b_param_o = 3'd0; // To N
-                                end else begin
-                                    b_opcode_o = 3'd6; // B_PROBE (Downgrade)
-                                    b_param_o = 3'd1; // To B (Shared)
+                                if (req_opcode_q == 3'd7) begin // AcquirePerm (Upgrade/Write)
+                                    b_opcode_o = 3'd7; // B_PROBE_PERM
+                                    b_param_o = 3'd1; // TtoN (Invalidate) - FIXED (Was 3'd0 TtoB)
+                                end else begin // AcquireBlock
+                                    b_opcode_o = 3'd6; // B_PROBE
+                                    b_param_o = 3'd1; // TtoN (Invalidate) - FIXED (Comment was "To B")
                                 end
                             end else begin
                                 // Eviction
