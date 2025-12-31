@@ -22,6 +22,13 @@ module rv64g_l1_dcache (
 	output reg         rvalid_o,
 	output reg [63:0]  rdata_o,
 
+    // Atomic Operation Signals
+    input              amo_i,          // Atomic operation flag
+    input              lr_i,           // Load-Reserved operation
+    input              sc_i,           // Store-Conditional operation
+    input       [4:0]  amo_op_i,       // Atomic operation type
+    input              amo_word_i,     // Atomic word operation flag (1=32b, 0=64b)
+
 	// TileLink A Channel (Request)
 	output reg         tl_a_valid_o,
 	input              tl_a_ready_i,
@@ -122,7 +129,9 @@ module rv64g_l1_dcache (
 	                 S_WB_DATA = 4'd6,
 	                 S_WB_WAIT = 4'd7,
 	                 S_PERM_REQ = 4'd8,
-                     S_PROBE_RESP = 4'd9;
+                     S_PROBE_RESP = 4'd9,
+                     S_AMO_MODIFY = 4'd10,
+                     S_AMO_WRITE = 4'd11;
 
 	rv64g_l1_arrays #(
 		.SETS(SETS),
@@ -164,6 +173,30 @@ module rv64g_l1_dcache (
 		.used_way_i(plru_used_way_q),
 		.valid_i   (arr_valid_way),
 		.victim_o  (victim_way)
+	);
+
+    // Atomic Operation Registers
+	reg               pend_is_amo_q, pend_is_amo_n;         // Pending is atomic op
+	reg [4:0]         pend_amo_op_q, pend_amo_op_n;         // Pending AMO operation
+	reg               pend_amo_word_q, pend_amo_word_n;     // Pending AMO word flag
+	reg [63:0]        amo_old_value_q, amo_old_value_n;     // Old value for AMO (to return to CPU)
+
+	// LR/SC Reservation Registers
+	reg               resv_valid_q, resv_valid_n;           // Reservation valid flag
+	reg [57:0]        resv_addr_q, resv_addr_n;             // Reservation address (tag + index)
+	reg               resv_word_q, resv_word_n;             // Reservation size: 1=word, 0=double
+	reg               pend_is_lr_q, pend_is_lr_n;           // Pending LR operation
+	reg               pend_is_sc_q, pend_is_sc_n;           // Pending SC operation
+	reg               sc_success_q, sc_success_n;           // SC result
+
+    // Atomic ALU
+	wire [63:0] amo_new_value;
+	rv64g_atomic_alu u_atomic_alu (
+		.amo_op_i      (pend_amo_op_q),
+		.amo_word_i    (pend_amo_word_q),
+		.old_value_i   (amo_old_value_q),
+		.operand_i     (pend_wdata_q),
+		.new_value_o   (amo_new_value)
 	);
 
 
@@ -215,7 +248,7 @@ module rv64g_l1_dcache (
 	// Combinational array index selection
 	wire [INDEX_W-1:0] binv_index_w = tl_b_address_i[INDEX_W+LINE_OFF_W-1 : LINE_OFF_W];
 	wire [INDEX_W-1:0] arr_index_w =
-		((state == S_WB_REQ) || (state == S_WB_DATA) || (state == S_WB_WAIT) || (state == S_REF_WAIT) || (state == S_RESP)) ? pend_index_q :
+		((state == S_WB_REQ) || (state == S_WB_DATA) || (state == S_WB_WAIT) || (state == S_REF_WAIT) || (state == S_RESP) || (state == S_AMO_WRITE)) ? pend_index_q :
         ((state == S_PROBE_RESP)) ? probe_pend_index_q :
 		((state == S_IDLE) && tl_b_valid_i ? binv_index_w : index);				// S_REF_WAIT not required?
 
@@ -297,6 +330,19 @@ module rv64g_l1_dcache (
 		pend_probe_source_n = pend_probe_source_q;
 		pend_has_data_n = pend_has_data_q;
 		pend_probe_hit_n = pend_probe_hit_q;
+        
+        // Atomic defaults
+		pend_is_amo_n    = pend_is_amo_q;
+		pend_amo_op_n    = pend_amo_op_q;
+		pend_amo_word_n  = pend_amo_word_q;
+		amo_old_value_n  = amo_old_value_q;
+		// LR/SC defaults
+		resv_valid_n     = resv_valid_q;
+		resv_addr_n      = resv_addr_q;
+		resv_word_n      = resv_word_q;
+		pend_is_lr_n     = pend_is_lr_q;
+		pend_is_sc_n     = pend_is_sc_q;
+		sc_success_n     = sc_success_q;
         
         return_state_n = return_state_q;
         probe_pend_index_n = probe_pend_index_q;
@@ -391,6 +437,8 @@ module rv64g_l1_dcache (
 				probe_pend_param_n = tl_b_param_i;
 				probe_pend_source_n = tl_b_source_i;
 				
+                if (resv_valid_q && ({binv_tag, binv_index} == resv_addr_q)) resv_valid_n = 1'b0;
+
 				if (binv_hit) begin
 					arr_way_sel = binv_way;
 					probe_pend_way_n = binv_way;
@@ -427,8 +475,160 @@ module rv64g_l1_dcache (
 			end else if (invalidate_all_i) begin
 				// Keep outputs idle; arrays will clear valids
 			end else begin
+            // ============ LR/SC Handling ============
+            // LR (Load-Reserved) hit
+            if (req_i && lr_i && hit) begin
+                gnt_n           = 1'b1;
+                rvalid_n        = 1'b1;
+                rdata_n         = hit_data_word;
+                resv_valid_n    = 1'b1;
+                resv_addr_n     = {tag, index};
+                resv_word_n     = amo_word_i;
+                pend_is_lr_n    = 1'b0; 
+                plru_access_n   = 1'b1;
+                plru_used_way_n = hit_way;
+            // LR Miss
+            end else if (req_i && lr_i && !hit) begin
+                gnt_n           = 1'b1;
+                pend_index_n    = index;
+                pend_tag_n      = tag;
+                pend_word_n     = word_off;
+                pend_victim_n   = victim_way;
+                pend_is_lr_n    = 1'b1;
+                pend_is_store_n = 1'b0; // Load-like
+                pend_amo_word_n = amo_word_i;
+                
+                pend_evict_tag_n = arr_tag_way_flat[(((victim_way+1)*TAG_W)-1) -: TAG_W];
+                beat_n          = 3'd0;
+                pend_evict_state_n = arr_state_way_flat[victim_way*2 +: 2];
+                if (arr_valid_way[victim_way]) begin
+                    state_n = S_WB_REQ;
+                    pend_has_data_n = arr_dirty_way[victim_way];
+                    pend_is_probe_n = 1'b0;
+                    arr_word_sel = 3'd0;
+                    arr_way_sel = victim_way;
+                    tl_c_data_n = arr_rdata_sel;
+                end else begin
+                    state_n = S_REF_REQ;
+                end
+            // SC Hit
+            end else if (req_i && sc_i && hit) begin
+                gnt_n = 1'b1;
+                if (resv_valid_q && ({tag, index} == resv_addr_q) && (amo_word_i == resv_word_q)) begin
+                    // Reservation valid.
+                    // Always serialize SC completion via AcquirePerm (even if already T/TT),
+                    // so in-flight writers can clear the reservation before we commit.
+                    pend_index_n    = index;
+                    pend_tag_n      = tag;
+                    pend_word_n     = word_off;
+                    pend_victim_n   = hit_way;
+                    pend_is_store_n = 1'b1;
+                    pend_wdata_n    = wdata_i;
+                    pend_be_n       = amo_word_i ? 8'h0F : 8'hFF;
+                    pend_is_sc_n    = 1'b1;
+                    pend_amo_word_n = amo_word_i;
+                    sc_success_n    = 1'b1;
+                    state_n         = S_PERM_REQ;
+                end else begin
+                    // SC Fail
+                    rvalid_n = 1'b1;
+                    rdata_n  = 64'd1; // Fail
+                    resv_valid_n = 1'b0;
+                end
+            // SC Miss
+            end else if (req_i && sc_i && !hit) begin
+                gnt_n = 1'b1;
+                pend_index_n    = index;
+                pend_tag_n      = tag;
+                pend_word_n     = word_off;
+                pend_victim_n   = victim_way;
+                pend_is_sc_n    = 1'b1;
+                pend_is_store_n = 1'b1; // Write intent
+                pend_amo_word_n = amo_word_i;
+                pend_wdata_n    = wdata_i;
+                
+                if (resv_valid_q && ({tag, index} == resv_addr_q) && (amo_word_i == resv_word_q)) begin
+                    sc_success_n = 1'b1;
+                end else begin
+                    sc_success_n = 1'b0;
+                end
+                
+                pend_evict_tag_n = arr_tag_way_flat[(((victim_way+1)*TAG_W)-1) -: TAG_W];
+                beat_n          = 3'd0;
+                pend_evict_state_n = arr_state_way_flat[victim_way*2 +: 2];
+                if (arr_valid_way[victim_way]) begin
+                    state_n = S_WB_REQ;
+                    pend_has_data_n = arr_dirty_way[victim_way];
+                    pend_is_probe_n = 1'b0;
+                    arr_word_sel = 3'd0;
+                    arr_way_sel = victim_way;
+                    tl_c_data_n = arr_rdata_sel;
+                end else begin
+                    state_n = S_REF_REQ;
+                end
+            // ============ AMO Handling ============
+            end else if (req_i && amo_i && hit) begin
+                gnt_n = 1'b1;
+                // Check permissions
+                if (arr_state_way_flat[hit_way*2 +: 2] == MESI_B) begin
+                    // Upgrade
+                    pend_index_n   = index;
+                    pend_tag_n     = tag;
+                    pend_word_n    = word_off;
+                    pend_victim_n  = hit_way;
+                    pend_is_store_n= 1'b1; // Write intent
+                    pend_wdata_n   = wdata_i;
+                    pend_is_amo_n  = 1'b1;
+                    pend_amo_op_n  = amo_op_i;
+                    pend_amo_word_n= amo_word_i;
+                    // Clear reservation if needed
+                    if (resv_valid_q && ({tag, index} == resv_addr_q)) resv_valid_n = 1'b0;
+                    state_n = S_PERM_REQ;
+                end else begin
+                    // Excl/Mod -> Perform AMO
+                    amo_old_value_n = hit_data_word;
+                    pend_is_amo_n   = 1'b1;
+                    pend_amo_op_n   = amo_op_i;
+                    pend_amo_word_n = amo_word_i;
+                    pend_wdata_n    = wdata_i;
+                    pend_index_n    = index;
+                    pend_tag_n      = tag;
+                    pend_word_n     = word_off;
+                    pend_victim_n   = hit_way;
+                    if (resv_valid_q && ({tag, index} == resv_addr_q)) resv_valid_n = 1'b0;
+                    state_n         = S_AMO_MODIFY;
+                    plru_access_n   = 1'b1;
+                    plru_used_way_n = hit_way;
+                end
+            // AMO Miss
+            end else if (req_i && amo_i && !hit) begin
+                gnt_n = 1'b1;
+                pend_index_n    = index;
+                pend_tag_n      = tag;
+                pend_word_n     = word_off;
+                pend_victim_n   = victim_way;
+                pend_is_amo_n   = 1'b1;
+                pend_amo_op_n   = amo_op_i;
+                pend_amo_word_n = amo_word_i;
+                pend_wdata_n    = wdata_i;
+                pend_is_store_n = 1'b1; // Write intent
+                if (resv_valid_q && ({tag, index} == resv_addr_q)) resv_valid_n = 1'b0;
+                
+                pend_evict_tag_n = arr_tag_way_flat[(((victim_way+1)*TAG_W)-1) -: TAG_W];
+                beat_n          = 3'd0;
+                pend_evict_state_n = arr_state_way_flat[victim_way*2 +: 2];
+                if (arr_valid_way[victim_way]) begin
+                    state_n = S_WB_REQ;
+                    pend_has_data_n = arr_dirty_way[victim_way];
+                    pend_is_probe_n = 1'b0;
+                    arr_word_sel = 3'd0;
+                    arr_way_sel = victim_way;
+                    tl_c_data_n = arr_rdata_sel;
+                end else begin
+                    state_n = S_REF_REQ;
+                end
 			// Read-hit: 1-cycle response
-			if (req_i && !we_i && hit) begin
+			end else if (req_i && !we_i && hit) begin
 				gnt_n    = 1'b1;
 				rvalid_n = 1'b1;
 				rdata_n  = hit_data_word;
@@ -460,6 +660,8 @@ module rv64g_l1_dcache (
 					arr_be        = be_i;
 					arr_tag_in    = tag;
 					arr_wdata     = wdata_i;
+                    // Clear reservation if store writes to reserved address
+                    if (resv_valid_q && ({tag, index} == resv_addr_q)) resv_valid_n = 1'b0;
 					plru_access_n   = 1'b1;
 					plru_used_way_n = hit_way;
 				end
@@ -540,6 +742,49 @@ module rv64g_l1_dcache (
         end
 
 		S_PERM_REQ: begin
+            // Handle Probe while requesting permissions to avoid deadlock
+            tl_b_ready_n = 1'b1;
+            if (tl_b_valid_i && tl_b_ready_o) begin
+				probe_pend_index_n = binv_index;
+				probe_pend_tag_n   = binv_tag;
+				probe_pend_param_n = tl_b_param_i;
+				probe_pend_source_n = tl_b_source_i;
+				
+                if (resv_valid_q && ({binv_tag, binv_index} == resv_addr_q)) resv_valid_n = 1'b0;
+
+				if (binv_hit) begin
+					arr_way_sel = binv_way;
+					probe_pend_way_n = binv_way;
+					probe_pend_hit_n = 1'b1;
+					
+					if (arr_dirty_way[binv_way]) begin
+						// Dirty: Send ProbeAckData
+						beat_n = 3'd0;
+						state_n = S_PROBE_RESP;
+						probe_pend_has_data_n = 1'b1;
+						// Invalidate line (downgrade to N)
+						arr_write_en = 1'b1;
+						arr_state_in = MESI_N;
+						arr_be = 8'h00;
+                        
+                        // Pre-fetch Beat 0
+                        arr_word_sel = 3'd0;
+					end else begin
+						// Clean: Send ProbeAck
+						arr_write_en = 1'b1;
+						arr_state_in = MESI_N;
+						arr_be = 8'h00;
+						state_n = S_PROBE_RESP;
+						probe_pend_has_data_n = 1'b0;
+					end
+				end else begin
+					// Miss: Send ProbeAck
+					state_n = S_PROBE_RESP;
+					probe_pend_has_data_n = 1'b0;
+					probe_pend_hit_n = 1'b0;
+				end
+                return_state_n = S_PERM_REQ;
+            end else begin
 			// Issue AcquirePerm
 			tl_a_valid_n = 1'b1;
 			tl_a_opcode_n = A_ACQUIRE_PERM;
@@ -553,6 +798,7 @@ module rv64g_l1_dcache (
                 tl_a_valid_n = 1'b0;
                 state_n = S_REF_WAIT;
             end
+            end
         end
 
 		S_REF_WAIT: begin
@@ -564,6 +810,8 @@ module rv64g_l1_dcache (
 				probe_pend_param_n = tl_b_param_i;
 				probe_pend_source_n = tl_b_source_i;
 				
+                if (resv_valid_q && ({binv_tag, binv_index} == resv_addr_q)) resv_valid_n = 1'b0;
+
 				if (binv_hit) begin
 					arr_way_sel = binv_way;
 					probe_pend_way_n = binv_way;
@@ -622,17 +870,8 @@ module rv64g_l1_dcache (
 					end
 				end else if (tl_d_opcode_i == D_GRANT) begin
 					// Grant for AcquirePerm
-					// Perform the pending write.
-					arr_word_sel  = pend_word_q;
-					arr_way_sel   = pend_victim_q;
-					arr_write_en  = 1'b1;
-					arr_state_in  = MESI_TT;
-					arr_be        = pend_be_q;
-					arr_tag_in    = pend_tag_q;
-					arr_wdata     = pend_wdata_q;
-					
+					// Capture sink for Ack, then complete in S_RESP
 					pend_sink_n = tl_d_sink_i;
-					
 					state_n = S_ACK; // Send GrantAck
 				end
 			end
@@ -812,7 +1051,44 @@ module rv64g_l1_dcache (
 			arr_way_sel  = pend_victim_q;
 			plru_access_n   = 1'b1;
 			plru_used_way_n = pend_victim_q;
-			if (pend_is_store_q) begin
+            
+            if (pend_is_lr_q) begin
+				// LR miss completion: Return data from refilled line, set reservation
+				rvalid_n     = 1'b1;
+				rdata_n      = arr_rdata_sel;
+				// Set reservation
+				resv_valid_n = 1'b1;
+				resv_addr_n  = {pend_tag_q, pend_index_q};
+				resv_word_n  = pend_amo_word_q;
+				pend_is_lr_n = 1'b0;
+				state_n      = S_IDLE;
+            end else if (pend_is_sc_q) begin
+                // SC miss completion
+                if (sc_success_q && resv_valid_q) begin // Re-check resv_valid_q
+                    // Write data
+					arr_write_en  = 1'b1;
+					arr_state_in  = MESI_TT;
+					arr_be        = pend_amo_word_q ? 8'h0F : 8'hFF;
+					arr_tag_in    = pend_tag_q;
+					arr_wdata     = pend_wdata_q;
+					rvalid_n      = 1'b1;
+					rdata_n       = 64'd0;  // Success
+                end else begin
+                    // Fail
+					rvalid_n      = 1'b1;
+					rdata_n       = 64'd1;  // Failure
+                end
+				// Clear reservation
+				resv_valid_n = 1'b0;
+				pend_is_sc_n = 1'b0;
+                sc_success_n = 1'b0;
+                pend_is_store_n = 1'b0;
+				state_n      = S_IDLE;
+            end else if (pend_is_amo_q) begin
+				// AMO miss completion: latch old value from refilled line, then modify
+				amo_old_value_n = arr_rdata_sel;
+				state_n = S_AMO_MODIFY;
+            end else if (pend_is_store_q) begin
 				// Perform BE-merge store into freshly refilled line, set dirty, then complete write via gnt
 				arr_write_en  = 1'b1;
 				arr_state_in  = MESI_TT;
@@ -828,6 +1104,32 @@ module rv64g_l1_dcache (
 				rdata_n  = arr_rdata_sel;
 				state_n  = S_IDLE;
 			end
+		end
+
+        S_AMO_MODIFY: begin
+			// Compute new value using atomic ALU (amo_new_value wire already computed)
+			// Transition to write state
+			state_n = S_AMO_WRITE;
+		end
+
+		S_AMO_WRITE: begin
+			// Write new value back to cache array
+			// index driven by arr_index_w wire (uses pend_index_q)
+			arr_word_sel  = pend_word_q;
+			arr_way_sel   = pend_victim_q;
+			arr_write_en  = 1'b1;
+			arr_state_in  = MESI_TT;
+			arr_be        = (pend_amo_word_q) ? 8'h0F : 8'hFF;
+			arr_tag_in    = pend_tag_q;
+			arr_wdata     = amo_new_value;
+			plru_access_n   = 1'b1;
+			plru_used_way_n = pend_victim_q;
+			// Return old value to CPU
+			rvalid_n = 1'b1;
+			rdata_n  = amo_old_value_q;
+			// Clear AMO pending flag
+			pend_is_amo_n = 1'b0;
+			state_n  = S_IDLE;
 		end
 
 		default: begin
@@ -866,6 +1168,19 @@ module rv64g_l1_dcache (
             probe_pend_has_data_q <= 0;
             probe_pend_hit_q <= 0;
             probe_pend_way_q <= 0;
+            
+            // Atomic registers
+			pend_is_amo_q <= 1'b0;
+			pend_amo_op_q <= 5'd0;
+			pend_amo_word_q <= 1'b0;
+			amo_old_value_q <= 64'd0;
+			// LR/SC registers
+			resv_valid_q <= 1'b0;
+			resv_addr_q <= 52'd0;
+			resv_word_q <= 1'b0;
+			pend_is_lr_q <= 1'b0;
+			pend_is_sc_q <= 1'b0;
+			sc_success_q <= 1'b0;
 		end else begin
             // Debug prints removed
 
@@ -896,6 +1211,19 @@ module rv64g_l1_dcache (
             probe_pend_has_data_q <= probe_pend_has_data_n;
             probe_pend_hit_q <= probe_pend_hit_n;
             probe_pend_way_q <= probe_pend_way_n;
+            
+            // Atomic registers
+			pend_is_amo_q <= pend_is_amo_n;
+			pend_amo_op_q <= pend_amo_op_n;
+			pend_amo_word_q <= pend_amo_word_n;
+			amo_old_value_q <= amo_old_value_n;
+			// LR/SC registers
+			resv_valid_q <= resv_valid_n;
+			resv_addr_q <= resv_addr_n;
+			resv_word_q <= resv_word_n;
+			pend_is_lr_q <= pend_is_lr_n;
+			pend_is_sc_q <= pend_is_sc_n;
+			sc_success_q <= sc_success_n;
 		end
 	end
 

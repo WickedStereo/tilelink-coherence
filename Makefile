@@ -14,7 +14,8 @@ L1_PARAMS := $(RTL_DIR)/params.vh
 L1_RTL := \
 	$(RTL_DIR)/l1/rv64g_l1_dcache.v \
 	$(RTL_DIR)/l1/rv64g_l1_arrays.v \
-	$(RTL_DIR)/l1/rv64g_l1_plru.v
+	$(RTL_DIR)/l1/rv64g_l1_plru.v \
+    $(RTL_DIR)/l1/rv64g_atomic_alu.v
 
 
 VERILATOR_FLAGS := -cc -exe -Wall -Wno-fatal -trace --timing -I$(RTL_DIR) $(DBG_DEFINE)
@@ -200,8 +201,9 @@ SYSTEM_RTL := \
 $(RTL_DIR)/system/rv64g_cache_system.v \
 $(RTL_DIR)/l1/rv64g_l1_dcache.v \
 $(RTL_DIR)/l1/rv64g_l1_arrays.v \
-$(RTL_DIR)/l1/rv64g_l1_plru.v \
-$(RTL_DIR)/l2/rv64g_l2_cache.v \
+    $(RTL_DIR)/l1/rv64g_l1_plru.v \
+    $(RTL_DIR)/l1/rv64g_atomic_alu.v \
+    $(RTL_DIR)/l2/rv64g_l2_cache.v \
 $(RTL_DIR)/l2/rv64g_l2_fsm.v \
 $(RTL_DIR)/l2/rv64g_l2_directory.v \
 $(RTL_DIR)/l2/rv64g_l2_arrays.v \

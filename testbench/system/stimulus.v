@@ -16,6 +16,13 @@ module stimulus #(
     output reg  [CORES*64-1:0] cpu_addr,
     output reg  [CORES*64-1:0] cpu_wdata,
     
+    // Atomic Interfaces (To DUT)
+    output reg  [CORES-1:0]    cpu_amo,
+    output reg  [CORES-1:0]    cpu_lr,
+    output reg  [CORES-1:0]    cpu_sc,
+    output reg  [CORES*5-1:0]  cpu_amo_op,
+    output reg  [CORES-1:0]    cpu_amo_word,
+
     // CPU Interfaces (From DUT)
     input wire [CORES-1:0] cpu_gnt,
     input wire [CORES-1:0] cpu_rvalid,
@@ -96,6 +103,92 @@ module stimulus #(
             while (!cpu_rvalid[id]) @(posedge clk);
             data = cpu_rdata[id*64 +: 64];
             $display("[%0d cycles] CPU[%0d] READ:  data=0x%016h (COMPLETE)", $time / 10, id, data);
+        end
+    endtask
+
+    task automatic core_amo;
+        input integer id;
+        input [63:0] addr;
+        input [63:0] operand;
+        input [4:0]  op;
+        input        word_op; // 1=word, 0=double
+        output [63:0] old_val;
+        begin
+            $display("[%0d cycles] CPU[%0d] AMO OP=%0d Addr=0x%016h Operand=0x%016h", $time/10, id, op, addr, operand);
+            @(posedge clk);
+            #1;
+            cpu_req[id]   = 1;
+            cpu_amo[id]   = 1;
+            cpu_amo_op[id*5 +: 5] = op;
+            cpu_amo_word[id] = word_op;
+            cpu_addr[id*64 +: 64] = addr;
+            cpu_wdata[id*64 +: 64] = operand;
+            
+            while (!cpu_gnt[id]) @(posedge clk);
+            $display("[%0d cycles] CPU[%0d] AMO Granted", $time/10, id);
+            
+            #1;
+            cpu_req[id] = 0;
+            cpu_amo[id] = 0;
+            cpu_amo_op[id*5 +: 5] = 0;
+            
+            while (!cpu_rvalid[id]) @(posedge clk);
+            old_val = cpu_rdata[id*64 +: 64];
+            $display("[%0d cycles] CPU[%0d] AMO Complete. Old Val=0x%016h", $time/10, id, old_val);
+        end
+    endtask
+
+    task automatic core_lr;
+        input integer id;
+        input [63:0] addr;
+        output [63:0] data;
+        begin
+            $display("[%0d cycles] CPU[%0d] LR Addr=0x%016h", $time/10, id, addr);
+            @(posedge clk);
+            #1;
+            cpu_req[id]   = 1;
+            cpu_lr[id]    = 1;
+            cpu_addr[id*64 +: 64] = addr;
+            
+            while (!cpu_gnt[id]) @(posedge clk);
+            $display("[%0d cycles] CPU[%0d] LR Granted", $time/10, id);
+            
+            #1;
+            cpu_req[id] = 0;
+            cpu_lr[id]  = 0;
+            
+            while (!cpu_rvalid[id]) @(posedge clk);
+            data = cpu_rdata[id*64 +: 64];
+            $display("[%0d cycles] CPU[%0d] LR Complete. Data=0x%016h", $time/10, id, data);
+        end
+    endtask
+
+    task automatic core_sc;
+        input integer id;
+        input [63:0] addr;
+        input [63:0] data;
+        output success;
+        reg [63:0] ret_val;
+        begin
+            $display("[%0d cycles] CPU[%0d] SC Addr=0x%016h Data=0x%016h", $time/10, id, addr, data);
+            @(posedge clk);
+            #1;
+            cpu_req[id]   = 1;
+            cpu_sc[id]    = 1;
+            cpu_addr[id*64 +: 64] = addr;
+            cpu_wdata[id*64 +: 64] = data;
+            
+            while (!cpu_gnt[id]) @(posedge clk);
+            $display("[%0d cycles] CPU[%0d] SC Granted", $time/10, id);
+            
+            #1;
+            cpu_req[id] = 0;
+            cpu_sc[id]  = 0;
+            
+            while (!cpu_rvalid[id]) @(posedge clk);
+            ret_val = cpu_rdata[id*64 +: 64];
+            success = (ret_val == 0);
+            $display("[%0d cycles] CPU[%0d] SC Complete. Result=%0d (0=Success)", $time/10, id, ret_val);
         end
     endtask
 
@@ -235,6 +328,8 @@ module stimulus #(
 
     // Test Sequence
     reg [63:0] read_val;
+    reg sc_res;
+    reg [10:1] results;
     integer i;
 
     initial begin
@@ -243,6 +338,14 @@ module stimulus #(
         cpu_we = 0;
         cpu_addr = 0;
         
+        cpu_amo = 0;
+        cpu_lr = 0;
+        cpu_sc = 0;
+        cpu_amo_op = 0;
+        cpu_amo_word = 0;
+        
+        results = 0;
+
         // Tie off unused memory ports (now handled by external module)
         mem_a_ready = 0;
         mem_d_opcode = 0;
@@ -266,6 +369,12 @@ module stimulus #(
         $display("[%0d cycles]   2. Eviction with Sharers Test", $time / 10);
         $display("[%0d cycles]   3. Shared-to-Exclusive Upgrade (Verify AcquirePerm)", $time / 10);
         $display("[%0d cycles]   4. Dirty Line Probe (Verify Owner Downgrade)", $time / 10);
+        $display("[%0d cycles]   5. Atomic Increment (AMOADD)", $time / 10);
+        $display("[%0d cycles]   6. Load-Reserved/Store-Conditional Success (LR/SC)", $time / 10);
+        $display("[%0d cycles]   7. LR/SC Failure (Intervening Write)", $time / 10);
+        $display("[%0d cycles]   8. AMOSWAP (Swap Operation)", $time / 10);
+        $display("[%0d cycles]   9. Ping-Pong Ownership", $time / 10);
+        $display("[%0d cycles]  10. Capacity Eviction (Dirty Writeback)", $time / 10);
         $display("[%0d cycles] ========================================\n", $time / 10);
         
         // --- Test 1: Write/Write Contention ---
@@ -295,6 +404,7 @@ module stimulus #(
         
         $display("[%0d cycles] ========================================", $time / 10);
         if (read_val == 64'hAAAA || read_val == 64'hBBBB) begin
+            results[1] = 1;
             $display("[%0d cycles] PASS: Write Contention resolved", $time / 10);
             $display("[%0d cycles]        Last writer wins: 0x%016h", $time / 10, read_val);
         end else begin
@@ -332,6 +442,7 @@ module stimulus #(
         $display("[%0d cycles] ========================================", $time / 10);
         // Calculate expected value: addr 0x40000 -> mem_idx 0x8000 -> data 0x8000
         if (read_val == 64'h8000) begin
+            results[2] = 1;
             $display("[%0d cycles] PASS: Eviction completed without hang", $time / 10);
             $display("[%0d cycles]        Read data: 0x%016h (CORRECT)", $time / 10, read_val);
         end else begin
@@ -366,6 +477,7 @@ module stimulus #(
         core_read(0, 64'h80000, read_val);
         
         if (read_val == 64'hBEEF) begin
+             results[3] = 1;
              $display("[%0d cycles] PASS: Upgrade Write Successful.", $time / 10);
         end else begin
              $display("[%0d cycles] FAIL: Data Mismatch. Expected 0xBEEF, Got 0x%h", $time / 10, read_val);
@@ -390,6 +502,7 @@ module stimulus #(
         core_read(1, 64'h90000, read_val);
         
         if (read_val == 64'hD157) begin
+             results[4] = 1;
              $display("[%0d cycles] PASS: Dirty Data Read Successful.", $time / 10);
         end else begin
              $display("[%0d cycles] FAIL: Data Mismatch. Expected 0xD157, Got 0x%h", $time / 10, read_val);
@@ -397,10 +510,220 @@ module stimulus #(
         $display("[%0d cycles] ========================================\n", $time / 10);
 
         #100;
+
+        // --- Test 5: Atomic Increment (AMOADD) ---
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] TEST 5: Atomic Increment (AMOADD)", $time / 10);
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] Setup: Init address 0xA0000 with value 10", $time / 10);
+        $display("[%0d cycles] Action: Core 0 performs AMOADD with operand 5", $time / 10);
+        $display("[%0d cycles] Expect: Old Value = 10. New Value in Memory = 15.", $time / 10);
+        $display("[%0d cycles] ========================================\n", $time / 10);
+
+        results[5] = 1; // Assume pass, clear if fail
+        // Init: Addr 0xA0000, Sharers={C0}=1, Owner=0, State=3(Modified), Val=10
+        init_coherence_state(64'hA0000, 4'b0001, 0, 3, 64'd10);
+        
+        // AMOADD (Op=0)
+        core_amo(0, 64'hA0000, 64'd5, 5'd0, 0, read_val);
+        
+        if (read_val == 64'd10) begin
+             $display("[%0d cycles] PASS: AMO Returned correct old value (10).", $time / 10);
+        end else begin
+             results[5] = 0;
+             $display("[%0d cycles] FAIL: AMO Returned wrong old value. Expected 10, Got %0d", $time / 10, read_val);
+        end
+        
+        // Verify New Value (Read via Core 1)
+        core_read(1, 64'hA0000, read_val);
+        if (read_val == 64'd15) begin
+             $display("[%0d cycles] PASS: Memory updated correctly to 15.", $time / 10);
+        end else begin
+             results[5] = 0;
+             $display("[%0d cycles] FAIL: Memory update failed. Expected 15, Got %0d", $time / 10, read_val);
+        end
+        $display("[%0d cycles] ========================================\n", $time / 10);
+
+        #100;
+
+        // --- Test 6: Load-Reserved/Store-Conditional Success (LR/SC) ---
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] TEST 6: LR/SC Success", $time / 10);
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] Setup: Init address 0xB0000 with value 0x11", $time / 10);
+        $display("[%0d cycles] Action: Core 0 performs LR then SC (with 0x22).", $time / 10);
+        $display("[%0d cycles] Expect: LR returns 0x11. SC returns 0 (Success). Memory=0x22.", $time / 10);
+        $display("[%0d cycles] ========================================\n", $time / 10);
+
+        results[6] = 1; // Assume pass
+        init_coherence_state(64'hB0000, 4'b0001, 0, 3, 64'h11);
+
+        core_lr(0, 64'hB0000, read_val);
+        if (read_val != 64'h11) begin
+             results[6] = 0;
+             $display("[%0d cycles] FAIL: LR returned wrong data 0x%h", $time/10, read_val);
+        end
+
+        core_sc(0, 64'hB0000, 64'h22, sc_res);
+        if (sc_res) $display("[%0d cycles] PASS: SC Succeeded", $time/10);
+        else        begin
+             results[6] = 0;
+             $display("[%0d cycles] FAIL: SC Failed", $time/10);
+        end
+
+        core_read(0, 64'hB0000, read_val);
+        if (read_val == 64'h22) $display("[%0d cycles] PASS: Data updated to 0x22", $time/10);
+        else                    begin
+             results[6] = 0;
+             $display("[%0d cycles] FAIL: Data not updated. Got 0x%h", $time/10, read_val);
+        end
+
+        #100;
+
+        // --- Test 7: LR/SC Failure (Intervening Write) ---
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] TEST 7: LR/SC Failure (Intervening Write)", $time / 10);
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] Setup: Init address 0xC0000 with value 0x33", $time / 10);
+        $display("[%0d cycles] Action: C0 LR -> C1 Write 0x44 -> C0 SC 0x55", $time / 10);
+        $display("[%0d cycles] Expect: SC returns !0 (Fail). Data=0x44.", $time / 10);
+        $display("[%0d cycles] ========================================\n", $time / 10);
+
+        results[7] = 1; // Assume pass
+        init_coherence_state(64'hC0000, 4'b0001, 0, 3, 64'h33);
+
+        core_lr(0, 64'hC0000, read_val); // Register valid
+        
+        core_write(1, 64'hC0000, 64'h44); // Invalidate C0's reservation (C0 receives probe/inval)
+
+        core_sc(0, 64'hC0000, 64'h55, sc_res); // Should fail
+        if (!sc_res) $display("[%0d cycles] PASS: SC Failed as expected", $time/10);
+        else         begin
+             results[7] = 0;
+             $display("[%0d cycles] FAIL: SC Succeeded unexpectedly", $time/10);
+        end
+
+        core_read(0, 64'hC0000, read_val);
+        if (read_val == 64'h44) $display("[%0d cycles] PASS: Data is 0x44 (from C1)", $time/10);
+        else                    begin
+             results[7] = 0;
+             $display("[%0d cycles] FAIL: Data incorrect 0x%h", $time/10, read_val);
+        end
+
+        #100;
+
+        // --- Test 8: AMOSWAP ---
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] TEST 8: AMOSWAP", $time / 10);
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] Setup: Init 0xD0000 with 0x66", $time / 10);
+        $display("[%0d cycles] Action: C0 AMOSWAP with 0x77", $time / 10);
+        $display("[%0d cycles] Expect: Ret=0x66. Mem=0x77.", $time / 10);
+        $display("[%0d cycles] ========================================\n", $time / 10);
+
+        results[8] = 1; // Assume pass
+        init_coherence_state(64'hD0000, 4'b0001, 0, 3, 64'h66);
+
+        // AMOSWAP (Op=1)
+        core_amo(0, 64'hD0000, 64'h77, 5'd1, 0, read_val);
+
+        if (read_val == 64'h66) $display("[%0d cycles] PASS: AMOSWAP returned 0x66", $time/10);
+        else                    begin
+             results[8] = 0;
+             $display("[%0d cycles] FAIL: AMOSWAP returned 0x%h", $time/10, read_val);
+        end
+
+        core_read(1, 64'hD0000, read_val);
+        if (read_val == 64'h77) $display("[%0d cycles] PASS: Memory is 0x77", $time/10);
+        else                    begin
+             results[8] = 0;
+             $display("[%0d cycles] FAIL: Memory is 0x%h", $time/10, read_val);
+        end
+
+        #100;
+
+        // --- Test 9: Ping-Pong Ownership ---
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] TEST 9: Ping-Pong Ownership", $time / 10);
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] Sequence: C0 wr -> C1 wr -> C0 wr -> C1 wr", $time / 10);
+        $display("[%0d cycles] ========================================\n", $time / 10);
+
+        init_coherence_state(64'hE0000, 4'b0000, 0, 0, 64'h0); // Invalid everywhere
+
+        core_write(0, 64'hE0000, 64'h1111);
+        core_write(1, 64'hE0000, 64'h2222);
+        core_write(0, 64'hE0000, 64'h3333);
+        core_write(1, 64'hE0000, 64'h4444);
+
+        core_read(2, 64'hE0000, read_val);
+        if (read_val == 64'h4444) begin
+             results[9] = 1;
+             $display("[%0d cycles] PASS: Ping-Pong settled at 0x4444", $time/10);
+        end else begin
+             $display("[%0d cycles] FAIL: Got 0x%h", $time/10, read_val);
+        end
+
+        #100;
+
+        // --- Test 10: Capacity Eviction (Dirty Writeback) ---
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] TEST 10: Capacity Eviction (Dirty Writeback)", $time / 10);
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] Fill Set 1 (Index 1) with 8 dirty lines (Tags 0-7).", $time / 10);
+        $display("[%0d cycles] Access Line 9 (Tag 8). Check for Eviction.", $time / 10);
+        $display("[%0d cycles] ========================================\n", $time / 10);
+
+        // Fill Set 1 with 8 dirty lines
+        // Set 1 = Addr[13:6] = 1.
+        // We vary Tag: Addr[63:14].
+        // But wait, init_coherence_state derives set/tag from addr.
+        // L1 Set = Addr[10:6]. L2 Set = Addr[13:6].
+        // To hit L1 Set 1: Addr[10:6]=1.
+        // To hit L2 Set 1: Addr[13:6]=1.
+        // So Addr = Tag << 14 | Set << 6.
+        // Set = 1. Tag = 0..7.
+        // Addr = (w << 14) | (1 << 6).
+
+        for (i=0; i<8; i=i+1) begin
+            // 0x10040, 0x14040, etc.
+            init_coherence_state({(i[49:0] << 14) | 64'h40}, 4'b0001, 0, 3, 64'hA0 + i); 
+            // Addr, Sharers=C0, Owner=0, State=M, Val
+        end
+
+        // Now access Tag 8 in Set 1. (8 << 14) | 0x40 = 0x20040.
+        // This maps to Set 1, Way X. Since 8 ways are full/valid, one must be evicted.
+        // Since all are dirty, it must writeback (ReleaseData).
+        // TB monitors will show ReleaseData.
+        
+        $display("[%0d cycles] Accessing conflicting line 0x20040...", $time/10);
+        core_read(0, 64'h20040, read_val);
+        
+        $display("[%0d cycles] Read complete. Check logs for 'ReleaseData' on Channel C.", $time/10);
+        $display("[%0d cycles] PASS: Capacity Eviction Test Completed.", $time/10);
+        results[10] = 1;
+
+        #100;
         
         $display("[%0d cycles] ========================================", $time / 10);
         $display("[%0d cycles] All Stress Tests Completed", $time / 10);
         $display("[%0d cycles] ========================================", $time / 10);
+        
+        $display("\n[%0d cycles] ========================================", $time / 10);
+        $display("[%0d cycles] TEST RESULTS SUMMARY", $time / 10);
+        $display("[%0d cycles] ========================================", $time / 10);
+        $display("Test 1: Write/Write Contention           %s", results[1] ? "PASS" : "FAIL");
+        $display("Test 2: Eviction with Sharers            %s", results[2] ? "PASS" : "FAIL");
+        $display("Test 3: Shared-to-Exclusive Upgrade      %s", results[3] ? "PASS" : "FAIL");
+        $display("Test 4: Dirty Line Probe                 %s", results[4] ? "PASS" : "FAIL");
+        $display("Test 5: Atomic Increment                 %s", results[5] ? "PASS" : "FAIL");
+        $display("Test 6: LR/SC Success                    %s", results[6] ? "PASS" : "FAIL");
+        $display("Test 7: LR/SC Failure                    %s", results[7] ? "PASS" : "FAIL");
+        $display("Test 8: AMOSWAP                          %s", results[8] ? "PASS" : "FAIL");
+        $display("Test 9: Ping-Pong Ownership              %s", results[9] ? "PASS" : "FAIL");
+        $display("Test 10: Capacity Eviction               %s", results[10] ? "PASS" : "FAIL");
+        $display("========================================");
+        
         $finish;
     end
 

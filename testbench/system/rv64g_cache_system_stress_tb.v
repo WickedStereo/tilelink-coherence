@@ -43,6 +43,13 @@ module rv64g_cache_system_stress_tb;
     wire [CORES-1:0] cpu_gnt;
     wire [CORES-1:0] cpu_rvalid;
     wire [CORES*64-1:0] cpu_rdata;
+    
+    // Atomic Interfaces
+    wire [CORES-1:0]    cpu_amo;
+    wire [CORES-1:0]    cpu_lr;
+    wire [CORES-1:0]    cpu_sc;
+    wire [CORES*5-1:0]  cpu_amo_op;
+    wire [CORES-1:0]    cpu_amo_word;
 
     // Memory Interface (Internal wires for connection)
     wire [2:0]   mem_a_opcode;
@@ -81,6 +88,12 @@ module rv64g_cache_system_stress_tb;
         .cpu_be(cpu_be),
         .cpu_addr(cpu_addr),
         .cpu_wdata(cpu_wdata),
+        
+        .cpu_amo(cpu_amo),
+        .cpu_lr(cpu_lr),
+        .cpu_sc(cpu_sc),
+        .cpu_amo_op(cpu_amo_op),
+        .cpu_amo_word(cpu_amo_word),
         
         // CPU From DUT
         .cpu_gnt(cpu_gnt),
@@ -143,6 +156,11 @@ module rv64g_cache_system_stress_tb;
         .cpu_be_i(cpu_be),
         .cpu_addr_i(cpu_addr),
         .cpu_wdata_i(cpu_wdata),
+        .cpu_amo_i(cpu_amo),
+        .cpu_lr_i(cpu_lr),
+        .cpu_sc_i(cpu_sc),
+        .cpu_amo_op_i(cpu_amo_op),
+        .cpu_amo_word_i(cpu_amo_word),
         .cpu_gnt_o(cpu_gnt),
         .cpu_rvalid_o(cpu_rvalid),
         .cpu_rdata_o(cpu_rdata),
