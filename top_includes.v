@@ -1,5 +1,6 @@
 `include "rtl/params.vh"
 `include "rtl/l1/rv64g_l1_arrays.v"
+`include "rtl/l1/rv64g_atomic_alu.v"
 `include "rtl/l1/rv64g_l1_dcache.v"
 `include "rtl/l1/rv64g_l1_plru.v"
 `include "rtl/l2/rv64g_l2_arrays.v"
