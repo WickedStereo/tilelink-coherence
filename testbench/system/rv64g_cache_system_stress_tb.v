@@ -44,7 +44,7 @@ module rv64g_cache_system_stress_tb;
     wire [CORES-1:0] cpu_rvalid;
     wire [CORES*64-1:0] cpu_rdata;
 
-    // Memory Interface
+    // Memory Interface (Internal wires for connection)
     wire [2:0]   mem_a_opcode;
     wire [2:0]   mem_a_param;
     wire [2:0]   mem_a_size;
@@ -87,7 +87,8 @@ module rv64g_cache_system_stress_tb;
         .cpu_rvalid(cpu_rvalid),
         .cpu_rdata(cpu_rdata),
 
-        // Memory From DUT
+        // Memory Connections (Pass-through for monitoring if needed, 
+        // but Stimulus no longer drives memory directly)
         .mem_a_opcode(mem_a_opcode),
         .mem_a_param(mem_a_param),
         .mem_a_size(mem_a_size),
@@ -96,19 +97,39 @@ module rv64g_cache_system_stress_tb;
         .mem_a_mask(mem_a_mask),
         .mem_a_data(mem_a_data),
         .mem_a_valid(mem_a_valid),
-        
-        // Memory To DUT
-        .mem_a_ready(mem_a_ready),
-        .mem_d_opcode(mem_d_opcode),
-        .mem_d_param(mem_d_param),
-        .mem_d_size(mem_d_size),
-        .mem_d_source(mem_d_source),
-        .mem_d_sink(mem_d_sink),
-        .mem_d_denied(mem_d_denied),
-        .mem_d_data(mem_d_data),
-        .mem_d_corrupt(mem_d_corrupt),
-        .mem_d_valid(mem_d_valid),
         .mem_d_ready(mem_d_ready)
+    );
+
+    // Memory Model Instance
+    simple_ram #(
+        .ADDR_W(ADDR_W),
+        .DATA_W(DATA_W)
+    ) mem (
+        .clk(clk),
+        .rst_n(rst_n),
+        
+        // A Channel (DUT -> Memory)
+        .a_opcode(mem_a_opcode),
+        .a_param(mem_a_param),
+        .a_size(mem_a_size),
+        .a_source(mem_a_source),
+        .a_address(mem_a_address),
+        .a_mask(mem_a_mask),
+        .a_data(mem_a_data),
+        .a_valid(mem_a_valid),
+        .a_ready(mem_a_ready),
+        
+        // D Channel (Memory -> DUT)
+        .d_opcode(mem_d_opcode),
+        .d_param(mem_d_param),
+        .d_size(mem_d_size),
+        .d_source(mem_d_source),
+        .d_sink(mem_d_sink),
+        .d_denied(mem_d_denied),
+        .d_data(mem_d_data),
+        .d_corrupt(mem_d_corrupt),
+        .d_valid(mem_d_valid),
+        .d_ready(mem_d_ready)
     );
 
     // DUT Block
@@ -166,7 +187,7 @@ module rv64g_cache_system_stress_tb;
                     .DATA_W(DATA_W),
                     .SOURCE_W(4),
                     .SINK_W(4),
-                    .CHANNEL_NAME($sformatf("L1[%0d]", m))
+                    .CHANNEL_NAME(m==0 ? "L1[0]" : m==1 ? "L1[1]" : m==2 ? "L1[2]" : "L1[3]")
                 ) l1_monitor (
                     // Channel A (L1 -> Xbar requests)
                     .a_valid(dut.gen_l1[m].l1.tl_a_valid_o),
@@ -204,7 +225,7 @@ module rv64g_cache_system_stress_tb;
                     .d_valid(dut.gen_l1[m].l1.tl_d_valid_i),
                     .d_ready(dut.gen_l1[m].l1.tl_d_ready_o),
                     .d_opcode(dut.gen_l1[m].l1.tl_d_opcode_i),
-                    .d_param({1'b0, dut.gen_l1[m].l1.tl_d_param_i}),
+                    .d_param({1'b0, dut.gen_l1[m].l1.tl_d_param_i[0]}), // Fix width mismatch
                     .d_size(dut.gen_l1[m].l1.tl_d_size_i),
                     .d_source(dut.gen_l1[m].l1.tl_d_source_i),
                     .d_sink(dut.gen_l1[m].l1.tl_d_sink_i),
@@ -262,7 +283,7 @@ module rv64g_cache_system_stress_tb;
             assign l2_b_valid = dut.l2.tl_b_valid_o;
             assign l2_b_ready = dut.l2.tl_b_ready_i;
             assign l2_b_opcode = dut.l2.tl_b_opcode_o;
-            assign l2_b_param = dut.l2.tl_b_param_o;
+            assign l2_b_param = dut.l2.tl_b_param_o[1:0];
             assign l2_b_address = dut.l2.tl_b_address_o;
             
             assign l2_c_valid = dut.l2.tl_c_valid_i;
@@ -286,7 +307,8 @@ module rv64g_cache_system_stress_tb;
                 .DATA_W(DATA_W),
                 .SOURCE_W(6),  // M_SOURCE_W = 4 + 2
                 .SINK_W(2),
-                .CHANNEL_NAME("L2")
+                .CHANNEL_NAME("L2"),
+                .IS_MANAGER(1)
             ) l2_monitor (
                 // Channel A (Xbar -> L2 requests)
                 .a_valid(l2_a_valid),
@@ -324,7 +346,7 @@ module rv64g_cache_system_stress_tb;
                 .d_valid(l2_d_valid),
                 .d_ready(l2_d_ready),
                 .d_opcode(l2_d_opcode),
-                .d_param({1'b0, l2_d_param}),
+                .d_param({1'b0, l2_d_param[0]}), // Fix width mismatch
                 .d_size(4'd6),
                 .d_source(l2_d_source),
                 .d_sink(l2_d_sink),
@@ -347,7 +369,8 @@ module rv64g_cache_system_stress_tb;
         .DATA_W(DATA_W),
         .SOURCE_W(4),
         .SINK_W(2),
-        .CHANNEL_NAME("MEM")
+        .CHANNEL_NAME("MEM"),
+        .IS_MANAGER(1)
     ) mem_monitor (
         // Channel A (L2 -> Memory requests: Get, PutFullData)
         .a_valid(mem_a_valid),
@@ -385,7 +408,7 @@ module rv64g_cache_system_stress_tb;
         .d_valid(mem_d_valid),
         .d_ready(mem_d_ready),
         .d_opcode(mem_d_opcode),
-        .d_param({1'b0, mem_d_param}),  // mem_d_param is [1:0], monitor expects [2:0]
+        .d_param({1'b0, mem_d_param[0]}),  // mem_d_param is [1:0], monitor expects [2:0]
         .d_size({1'b0, mem_d_size}),    // mem_d_size is [2:0], monitor expects [3:0]
         .d_source(mem_d_source),
         .d_sink(mem_d_sink),

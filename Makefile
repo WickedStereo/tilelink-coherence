@@ -226,7 +226,7 @@ SYSTEM_STIMULUS := $(SYSTEM_TB_DIR)/stimulus.v
 SYSTEM_STRESS_CPP := $(SYSTEM_TB_DIR)/sim_system_stress.cpp
 
 verilate_system_stress: clean_verilator
-	$(VERILATOR) $(VERILATOR_FLAGS) $(SYSTEM_STRESS_CPP) $(SYSTEM_STRESS_TB) $(SYSTEM_STIMULUS) $(TB_DIR)/system/tl_monitor.v $(SYSTEM_RTL) $(L1_PARAMS)
+	$(VERILATOR) $(VERILATOR_FLAGS) $(SYSTEM_STRESS_CPP) $(SYSTEM_STRESS_TB) $(SYSTEM_STIMULUS) $(TB_DIR)/system/simple_ram.v $(TB_DIR)/system/tl_monitor.v $(SYSTEM_RTL) $(L1_PARAMS)
 
 build_system_stress: verilate_system_stress
 	$(MAKE) -C obj_dir -f Vrv64g_cache_system_stress_tb.mk Vrv64g_cache_system_stress_tb

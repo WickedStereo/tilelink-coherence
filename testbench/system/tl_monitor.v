@@ -1,14 +1,15 @@
 `timescale 1ns/1ps
 
 // TileLink Channel Monitor
-// Monitors TileLink transactions and prints detailed information
+// Monitors TileLink transactions and prints detailed information in a clean, summarized format.
 
 module tl_monitor #(
     parameter ADDR_W = 64,
     parameter DATA_W = 64,
     parameter SOURCE_W = 4,
     parameter SINK_W = 4,
-    parameter CHANNEL_NAME = "TL"
+    parameter CHANNEL_NAME = "TL",
+    parameter IS_MANAGER = 0  // Set to 1 if monitoring a Manager (Slave) interface (e.g. L2, MEM)
 ) (
     // Channel A (Request)
     input wire a_valid,
@@ -59,8 +60,8 @@ module tl_monitor #(
     input wire [SINK_W-1:0] e_sink
 );
 
-    // Opcode decoders
-    function [80:0] decode_a_opcode;
+    // Helper Functions for Decoding
+    function [127:0] decode_a_opcode;
         input [2:0] opcode;
         case (opcode)
             3'd0: decode_a_opcode = "PutFullData";
@@ -75,7 +76,7 @@ module tl_monitor #(
         endcase
     endfunction
 
-    function [80:0] decode_b_opcode;
+    function [127:0] decode_b_opcode;
         input [2:0] opcode;
         case (opcode)
             3'd6: decode_b_opcode = "Probe";
@@ -84,7 +85,7 @@ module tl_monitor #(
         endcase
     endfunction
 
-    function [80:0] decode_c_opcode;
+    function [127:0] decode_c_opcode;
         input [2:0] opcode;
         case (opcode)
             3'd0: decode_c_opcode = "AccessAck";
@@ -98,7 +99,7 @@ module tl_monitor #(
         endcase
     endfunction
 
-    function [80:0] decode_d_opcode;
+    function [127:0] decode_d_opcode;
         input [2:0] opcode;
         case (opcode)
             3'd0: decode_d_opcode = "AccessAck";
@@ -111,79 +112,142 @@ module tl_monitor #(
         endcase
     endfunction
 
-    function [20:0] decode_param;
+    function [39:0] decode_grow_param;
         input [2:0] param;
         case (param)
-            3'd0: decode_param = "NtoB";
-            3'd1: decode_param = "NtoT";
-            3'd2: decode_param = "BtoT";
-            default: decode_param = "UNKNOWN";
+            3'd0: decode_grow_param = "NtoB";
+            3'd1: decode_grow_param = "NtoT";
+            3'd2: decode_grow_param = "BtoT";
+            3'd3: decode_grow_param = "TtoT"; // Not typical for Grow, but defined
+            3'd4: decode_grow_param = "BtoB"; // Not typical for Grow
+            3'd5: decode_grow_param = "NtoN";
+            default: decode_grow_param = "UNK";
         endcase
     endfunction
 
-    // Channel A Monitor
+    function [39:0] decode_shrink_param;
+        input [2:0] param;
+        case (param)
+            3'd0: decode_shrink_param = "TtoB";
+            3'd1: decode_shrink_param = "TtoN";
+            3'd2: decode_shrink_param = "BtoN";
+            3'd3: decode_shrink_param = "TtoT";
+            3'd4: decode_shrink_param = "BtoB";
+            3'd5: decode_shrink_param = "NtoN";
+            default: decode_shrink_param = "UNK";
+        endcase
+    endfunction
+
+    // ------------------------------------------------------------------------
+    // Channel A Monitor (Requests)
+    // ------------------------------------------------------------------------
+    reg [2:0] a_beat_cnt;
+    reg       a_in_burst;
+    
     always @(posedge a_valid) begin
         if (a_valid && a_ready) begin
-            $display("[%0d cycles] %s A-Channel: %s addr=0x%016h source=%0d param=%s size=%0d", 
-                     $time / 10, CHANNEL_NAME, decode_a_opcode(a_opcode), a_address, a_source, 
-                     decode_param(a_param), a_size);
-            if (a_opcode == 3'd0 || a_opcode == 3'd1) begin // PutFullData or PutPartialData
-                $display("                data=0x%016h mask=0x%02h", a_data, a_mask);
+            // Detect if this opcode carries data
+            if (a_opcode == 3'd0 || a_opcode == 3'd1) begin // PutFull/Partial
+                if (!a_in_burst) begin
+                    $display("[%0d cycles] %s %s A: %s @ 0x%h (Src:%0d Sz:%0d)", 
+                             $time/10, CHANNEL_NAME, IS_MANAGER ? "<-" : "->", decode_a_opcode(a_opcode), a_address, a_source, a_size);
+                    a_in_burst = 1;
+                    a_beat_cnt = 0;
+                end else begin
+                    a_beat_cnt = a_beat_cnt + 1;
+                end
+                
+                // End of burst check (assuming 64B line / 8B data = 7 beats max for Size 6)
+                // Simplified: Just check for beat 7
+                if (a_beat_cnt == 3'd7) begin
+                    $display("                ... (Data Burst Complete)");
+                    a_in_burst = 0;
+                    a_beat_cnt = 0;
+                end
+            end else begin
+                // Non-data commands (Get, Acquire) - Print immediately
+                $display("[%0d cycles] %s %s A: %s @ 0x%h (Src:%0d Param:%s)", 
+                         $time/10, CHANNEL_NAME, IS_MANAGER ? "<-" : "->", decode_a_opcode(a_opcode), a_address, a_source, decode_grow_param(a_param));
             end
         end
     end
 
-    // Channel B Monitor
+    // ------------------------------------------------------------------------
+    // Channel B Monitor (Probes)
+    // ------------------------------------------------------------------------
     always @(posedge b_valid) begin
         if (b_valid && b_ready) begin
-            $display("[%0d cycles] %s B-Channel: %s addr=0x%016h source=%0d param=%0d", 
-                     $time / 10, CHANNEL_NAME, decode_b_opcode(b_opcode), b_address, b_source, b_param);
+            $display("[%0d cycles] %s %s B: %s @ 0x%h (Src:%0d Param:%s)", 
+                     $time/10, CHANNEL_NAME, IS_MANAGER ? "->" : "<-", decode_b_opcode(b_opcode), b_address, b_source, decode_shrink_param(b_param));
         end
     end
 
-    // Channel C Monitor
+    // ------------------------------------------------------------------------
+    // Channel C Monitor (Releases)
+    // ------------------------------------------------------------------------
+    reg [2:0] c_beat_cnt;
+    reg       c_in_burst;
+
     always @(posedge c_valid) begin
         if (c_valid && c_ready) begin
-            $display("[%0d cycles] %s C-Channel: %s addr=0x%016h source=%0d param=%0d", 
-                     $time / 10, CHANNEL_NAME, decode_c_opcode(c_opcode), c_address, c_source, c_param);
-            if (c_opcode == 3'd1 || c_opcode == 3'd5 || c_opcode == 3'd7) begin // Has data
-                $display("                data=0x%016h", c_data);
+            if (c_opcode == 3'd1 || c_opcode == 3'd5 || c_opcode == 3'd7) begin // AccessAckData, ProbeAckData, ReleaseData
+                if (!c_in_burst) begin
+                    $display("[%0d cycles] %s %s C: %s @ 0x%h (Src:%0d Param:%s)", 
+                             $time/10, CHANNEL_NAME, IS_MANAGER ? "<-" : "->", decode_c_opcode(c_opcode), c_address, c_source, decode_shrink_param(c_param));
+                    c_in_burst = 1;
+                    c_beat_cnt = 0;
+                end else begin
+                    c_beat_cnt = c_beat_cnt + 1;
+                end
+
+                if (c_beat_cnt == 3'd7) begin
+                    $display("                ... (Data Burst Complete)");
+                    c_in_burst = 0;
+                    c_beat_cnt = 0;
+                end
+            end else begin
+                $display("[%0d cycles] %s %s C: %s @ 0x%h (Src:%0d Param:%s)", 
+                         $time/10, CHANNEL_NAME, IS_MANAGER ? "<-" : "->", decode_c_opcode(c_opcode), c_address, c_source, decode_shrink_param(c_param));
             end
         end
     end
 
-    // Channel D Monitor
-    reg [2:0] d_opcode_q;
-    reg [DATA_W-1:0] d_data_q;
+    // ------------------------------------------------------------------------
+    // Channel D Monitor (Grants/Responses)
+    // ------------------------------------------------------------------------
     reg [2:0] d_beat_cnt;
-    
+    reg       d_in_burst;
+
     always @(posedge d_valid) begin
         if (d_valid && d_ready) begin
             if (d_opcode == 3'd1 || d_opcode == 3'd5) begin // AccessAckData or GrantData
-                if (d_opcode_q != d_opcode) begin
-                    // New transaction
+                if (!d_in_burst) begin
+                    $display("[%0d cycles] %s %s D: %s (Src:%0d Snk:%0d) -> Data Start", 
+                             $time/10, CHANNEL_NAME, IS_MANAGER ? "->" : "<-", decode_d_opcode(d_opcode), d_source, d_sink);
+                    d_in_burst = 1;
                     d_beat_cnt = 0;
-                    $display("[%0d cycles] %s D-Channel: %s addr=0x%016h source=%0d sink=%0d beat=0", 
-                             $time / 10, CHANNEL_NAME, decode_d_opcode(d_opcode), 64'h0, d_source, d_sink);
                 end else begin
                     d_beat_cnt = d_beat_cnt + 1;
                 end
-                $display("                data=0x%016h beat=%0d", d_data, d_beat_cnt);
-                if (d_beat_cnt == 7) begin
-                    $display("                (TRANSACTION COMPLETE)");
+
+                if (d_beat_cnt == 3'd7) begin
+                    $display("                ... (Data Burst Complete)");
+                    d_in_burst = 0;
+                    d_beat_cnt = 0;
                 end
             end else begin
-                $display("[%0d cycles] %s D-Channel: %s source=%0d sink=%0d", 
-                         $time / 10, CHANNEL_NAME, decode_d_opcode(d_opcode), d_source, d_sink);
+                $display("[%0d cycles] %s %s D: %s (Src:%0d Snk:%0d)", 
+                         $time/10, CHANNEL_NAME, IS_MANAGER ? "->" : "<-", decode_d_opcode(d_opcode), d_source, d_sink);
             end
-            d_opcode_q = d_opcode;
         end
     end
 
-    // Channel E Monitor
+    // ------------------------------------------------------------------------
+    // Channel E Monitor (GrantAck)
+    // ------------------------------------------------------------------------
     always @(posedge e_valid) begin
         if (e_valid && e_ready) begin
-            $display("[%0d cycles] %s E-Channel: GrantAck sink=%0d", $time / 10, CHANNEL_NAME, e_sink);
+            $display("[%0d cycles] %s %s E: GrantAck (Snk:%0d)", $time/10, CHANNEL_NAME, IS_MANAGER ? "<-" : "->", e_sink);
         end
     end
 

@@ -21,7 +21,7 @@ module stimulus #(
     input wire [CORES-1:0] cpu_rvalid,
     input wire [CORES*64-1:0] cpu_rdata,
 
-    // Memory Interface (From DUT - A Channel)
+    // Memory Interface (From DUT) - Disconnected, used for monitor only
     input wire [2:0]   mem_a_opcode,
     input wire [2:0]   mem_a_param,
     input wire [2:0]   mem_a_size,
@@ -31,10 +31,8 @@ module stimulus #(
     input wire [DATA_W-1:0]  mem_a_data,
     input wire         mem_a_valid,
     
-    // Memory Interface (To DUT - A Channel Ready)
-    output reg          mem_a_ready,
-
-    // Memory Interface (To DUT - D Channel)
+    // Memory Interface (To DUT) - Disconnected, driven by simple_ram in TB
+    output reg          mem_a_ready, // Not used here anymore
     output reg  [2:0]   mem_d_opcode,
     output reg  [1:0]   mem_d_param,
     output reg  [2:0]   mem_d_size,
@@ -44,8 +42,6 @@ module stimulus #(
     output reg  [DATA_W-1:0]  mem_d_data,
     output reg          mem_d_corrupt,
     output reg          mem_d_valid,
-    
-    // Memory Interface (From DUT - D Channel Ready)
     input wire         mem_d_ready
 );
 
@@ -103,130 +99,68 @@ module stimulus #(
         end
     endtask
 
-    // Memory Responder (Simple RAM)
-    reg [63:0] memory [0:65535]; // Larger memory for eviction test
-    integer i;
-    reg [63:0] read_val; // For task outputs
-    
-    initial begin
-        for (i=0; i<65536; i=i+1) memory[i] = i; // Init with index
-        mem_a_ready = 0;
-        mem_d_valid = 0;
-        state = S_IDLE;
-        burst_cnt = 0;
-    end
+    task backdoor_init_l2;
+        integer w;
+        integer core;
+        reg [49:0] l2_tag;
+        reg [52:0] l1_tag;
+        reg [63:0] data;
+        begin
+            $display("[%0d cycles] Backdoor initializing L2 Set 0 (and partial L1)...", $time/10);
+            for (w = 0; w < 16; w = w + 1) begin
+                l2_tag = w; // Addr = w << 14. L2 Tag = Addr >> 14 = w.
+                l1_tag = w << 3; // Addr = w << 14. L1 Tag = Addr >> 11 = w << 3.
+                
+                // 1. L2 Directory: Valid=1, Sharers={C1,C0}=11, Owner=0, Dirty=0
+                // Value = 9'h07
+                $root.rv64g_cache_system_stress_tb.dut.l2.directory.ram[0][w*9 +: 9] = 9'h07;
 
-    // Memory Responder Logic
-    localparam S_IDLE = 0;
-    localparam S_READ_BURST = 1;
-    localparam S_WRITE_BURST = 2;
-    
-    reg [1:0] state;
-    reg [2:0] burst_cnt;
-    reg [63:0] burst_addr;
-    reg [3:0] burst_source;
-    reg [2:0] burst_size;
+                // 2. L2 Tag Array: Way w, Set 0
+                $root.rv64g_cache_system_stress_tb.dut.l2.arrays.tag_q[w][0] = l2_tag;
 
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            state <= S_IDLE;
-            burst_cnt <= 0;
-            mem_d_valid <= 0;
-            mem_a_ready <= 0;
-        end else begin
-            // D Channel Logic (Responses)
-            if (mem_d_valid && mem_d_ready) begin
-                if (state == S_READ_BURST) begin
-                        if (burst_cnt == 7) begin
-                        $display("[%0d cycles] MEM: D-Channel AccessAckData beat=7 data=0x%016h (READ COMPLETE)", 
-                                 $time / 10, mem_d_data);
-                        state <= S_IDLE;
-                        mem_d_valid <= 0;
-                        mem_a_ready <= 1; // Ready for next
-                    end else begin
-                        burst_cnt <= burst_cnt + 1;
-                        mem_d_data <= memory[((burst_addr >> 3) & 16'hFFFF) + burst_cnt + 1];
-                        $display("[%0d cycles] MEM: D-Channel AccessAckData beat=%0d data=0x%016h", 
-                                 $time / 10, burst_cnt, mem_d_data);
-                    end
-                end else begin
-                    mem_d_valid <= 0; // Clear valid after single beat response (Write Ack)
+                // 3. L2 Data Array: Way w, Set 0, Word 0
+                data = w << 14; 
+                $root.rv64g_cache_system_stress_tb.dut.l2.arrays.data_q[w][0] = data;
+
+                // 4. L1 Backdoor Init (Only for first 8 lines -> Ways 0-7 map to L1 Ways 0-7)
+                if (w < 8) begin
+                    // Initialize Core 0 L1
+                    $root.rv64g_cache_system_stress_tb.dut.gen_l1[0].l1.u_arrays.state_q[w][0] = 2'b01;
+                    $root.rv64g_cache_system_stress_tb.dut.gen_l1[0].l1.u_arrays.tag_q[w][0] = l1_tag;
+                    $root.rv64g_cache_system_stress_tb.dut.gen_l1[0].l1.u_arrays.data_q[w][0] = data;
+
+                    // Initialize Core 1 L1
+                    $root.rv64g_cache_system_stress_tb.dut.gen_l1[1].l1.u_arrays.state_q[w][0] = 2'b01;
+                    $root.rv64g_cache_system_stress_tb.dut.gen_l1[1].l1.u_arrays.tag_q[w][0] = l1_tag;
+                    $root.rv64g_cache_system_stress_tb.dut.gen_l1[1].l1.u_arrays.data_q[w][0] = data;
                 end
             end
-            
-            // A Channel Logic
-            case (state)
-                S_IDLE: begin
-                    mem_a_ready <= 1; // Ready for new request
-                    if (mem_a_valid && mem_a_ready) begin
-                        if (mem_a_opcode == 3'd4) begin // Get (Read)
-                            $display("[%0d cycles] MEM: A-Channel GET    addr=0x%016h source=%0d size=%0d", 
-                                     $time / 10, mem_a_address, mem_a_source, mem_a_size);
-                            state <= S_READ_BURST;
-                            burst_cnt <= 0;
-                            burst_addr <= mem_a_address;
-                            burst_source <= mem_a_source;
-                            burst_size <= mem_a_size;
-                            
-                            mem_d_valid <= 1;
-                            mem_d_opcode <= 3'd1; // AccessAckData
-                            mem_d_param <= 0;
-                            mem_d_size <= mem_a_size;
-                            mem_d_source <= mem_a_source;
-                            mem_d_data <= memory[(mem_a_address >> 3) & 16'hFFFF];
-                            $display("[%0d cycles] MEM: D-Channel AccessAckData beat=0 data=0x%016h", 
-                                     $time / 10, mem_d_data);
-                            mem_a_ready <= 0; // Stop accepting A
-                        end else if (mem_a_opcode == 3'd0) begin // PutFullData (Write)
-                            $display("[%0d cycles] MEM: A-Channel PutFullData addr=0x%016h source=%0d size=%0d data=0x%016h", 
-                                     $time / 10, mem_a_address, mem_a_source, mem_a_size, mem_a_data);
-                            // First beat
-                            memory[(mem_a_address >> 3) & 16'hFFFF] = mem_a_data;
-                            burst_cnt <= 0;
-                            burst_addr <= mem_a_address;
-                            burst_source <= mem_a_source;
-                            state <= S_WRITE_BURST;
-                            // Keep mem_a_ready high
-                        end
-                    end
-                end
-                
-                S_WRITE_BURST: begin
-                    mem_a_ready <= 1;
-                    if (mem_a_valid && mem_a_ready) begin
-                        memory[((burst_addr >> 3) & 16'hFFFF) + burst_cnt + 1] = mem_a_data;
-                        $display("[%0d cycles] MEM: A-Channel PutFullData beat=%0d data=0x%016h", 
-                                 $time / 10, burst_cnt + 1, mem_a_data);
-                        
-                        if (burst_cnt == 6) begin // Received beat 7 (last one)
-                            state <= S_IDLE;
-                            // Send Ack
-                            mem_d_valid <= 1;
-                            mem_d_opcode <= 3'd0; // AccessAck
-                            mem_d_param <= 0;
-                            mem_d_size <= 3'd6; // 64 bytes
-                            mem_d_source <= burst_source;
-                            $display("[%0d cycles] MEM: D-Channel AccessAck source=%0d (WRITE COMPLETE)", 
-                                     $time / 10, burst_source);
-                        end else begin
-                            burst_cnt <= burst_cnt + 1;
-                        end
-                    end
-                end
-                
-                S_READ_BURST: begin
-                    mem_a_ready <= 0; // Busy reading
-                end
-            endcase
+            $display("[%0d cycles] L2 Set 0 Initialized (16 ways). L1 Set 0 Initialized (8 ways, consistent with L2 ways 0-7).", $time/10);
         end
-    end
+    endtask
 
     // Test Sequence
+    reg [63:0] read_val;
+    integer i;
+
     initial begin
         rst_n = 0;
         cpu_req = 0;
         cpu_we = 0;
         cpu_addr = 0;
+        
+        // Tie off unused memory ports (now handled by external module)
+        mem_a_ready = 0;
+        mem_d_opcode = 0;
+        mem_d_param = 0;
+        mem_d_size = 0;
+        mem_d_source = 0;
+        mem_d_sink = 0;
+        mem_d_denied = 0;
+        mem_d_data = 0;
+        mem_d_corrupt = 0;
+        mem_d_valid = 0;
+
         #20 rst_n = 1;
         
         #20;
@@ -256,7 +190,7 @@ module stimulus #(
             end
         join
 
-        $display("[%0d cycles] Both writes completed, waiting for coherence to settle...", $time / 10);
+        $display("[%0d cycles] Both CPU write requests accepted by L1, waiting for coherence to settle...", $time / 10);
         #200; // Wait for coherence to settle
 
         // Read back from Core 2 (Neutral observer)
@@ -277,34 +211,25 @@ module stimulus #(
 
         // --- Test 2: Eviction with Sharers ---
         $display("[%0d cycles] ========================================", $time / 10);
-        $display("[%0d cycles] TEST 2: Eviction with Sharers", $time / 10);
+        $display("[%0d cycles] TEST 2: Eviction with Sharers (Fast Init)", $time / 10);
         $display("[%0d cycles] ========================================", $time / 10);
-        $display("[%0d cycles] Filling L2 Set 0 with 16 shared lines", $time / 10);
-        $display("[%0d cycles] (Core 0 and Core 1 both read each line)", $time / 10);
+        $display("[%0d cycles] Filling L2 Set 0 via Backdoor (Sharers C0+C1)", $time / 10);
         $display("[%0d cycles] Then accessing 17th line to force eviction", $time / 10);
         $display("[%0d cycles] ========================================\n", $time / 10);
         
-        // Fill Set 0 (16 ways)
-        // Addr = Tag << 14 | Set << 6 | Offset
-        // Set = 0. Offset = 0.
-        // Addr = Tag << 14.
+        // Backdoor Initialize
+        backdoor_init_l2();
         
-        for (i=0; i<16; i=i+1) begin
-            // Core 0 Reads
-            core_read(0, (i << 14), read_val);
-            
-            // Core 1 Reads (Make it Shared)
-            core_read(1, (i << 14), read_val);
-        end
-        
-        $display("[%0d cycles] Set 0 filled with 16 shared lines", $time / 10);
+        $display("[%0d cycles] Set 0 filled via backdoor", $time / 10);
         $display("[%0d cycles] Accessing 17th line (Tag=16) to force eviction...", $time / 10);
-        $display("[%0d cycles] (L2 must probe Core 0 and Core 1 before eviction)", $time / 10);
+        $display("[%0d cycles] (L2 must probe Core 0 and Core 1. L1s hold Ways 0-7. L2 evicts Way 0.)", $time / 10);
+        $display("[%0d cycles] (Expectation: L1 HITS probe for Way 0, and invalidates it.)", $time / 10);
         
         // Access 17th line (Tag=16)
-        // This should force eviction of one of the previous lines
-        // Since they are Shared, L2 must Probe Core 0 and Core 1
-        // Expected: Address 0x40000 -> memory index 0x8000 -> data 0x8000
+        // This should force eviction of Way 0 (Tag=0)
+        // L2 sees Sharers=C0|C1 in Directory. Sends Probes.
+        // C0/C1 have 0-7. Probe is for 0. Hit! Reply ProbeAck (BtoN).
+        // L2 proceeds.
         
         core_read(0, (16 << 14), read_val);
         
