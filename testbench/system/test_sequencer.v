@@ -1,7 +1,7 @@
 `timescale 1ns/100ps
 
-module stimulus #(
-    parameter CORES = 4,
+module test_sequencer #(
+    parameter CoresIgnored = 4, // Parameter kept for compatibility but ports are hardcoded for 4 cores
     parameter ADDR_W = 64,
     parameter DATA_W = 64
 ) (
@@ -9,54 +9,144 @@ module stimulus #(
     output reg clk,
     output reg rst_n,
 
-    // CPU Interfaces (To DUT)
-    output reg  [CORES-1:0] cpu_req,
-    output reg  [CORES-1:0] cpu_we,
-    output reg  [CORES*8-1:0] cpu_be,
-    output reg  [CORES*64-1:0] cpu_addr,
-    output reg  [CORES*64-1:0] cpu_wdata,
-    
-    // Atomic Interfaces (To DUT)
-    output reg  [CORES-1:0]    cpu_amo,
-    output reg  [CORES-1:0]    cpu_lr,
-    output reg  [CORES-1:0]    cpu_sc,
-    output reg  [CORES*5-1:0]  cpu_amo_op,
-    output reg  [CORES-1:0]    cpu_amo_word,
+    // CPU Interfaces (To Core Stimulus Modules) - Exploded
+    // Core 0
+    output reg cpu_req_0, output reg cpu_we_0, output reg [7:0] cpu_be_0, 
+    output reg [63:0] cpu_addr_0, output reg [63:0] cpu_wdata_0,
+    output reg cpu_amo_0, output reg cpu_lr_0, output reg cpu_sc_0, 
+    output reg [4:0] cpu_amo_op_0, output reg cpu_amo_word_0,
+    input cpu_gnt_0, input cpu_rvalid_0, input [63:0] cpu_rdata_0,
 
-    // CPU Interfaces (From DUT)
-    input wire [CORES-1:0] cpu_gnt,
-    input wire [CORES-1:0] cpu_rvalid,
-    input wire [CORES*64-1:0] cpu_rdata,
+    // Core 1
+    output reg cpu_req_1, output reg cpu_we_1, output reg [7:0] cpu_be_1, 
+    output reg [63:0] cpu_addr_1, output reg [63:0] cpu_wdata_1,
+    output reg cpu_amo_1, output reg cpu_lr_1, output reg cpu_sc_1, 
+    output reg [4:0] cpu_amo_op_1, output reg cpu_amo_word_1,
+    input cpu_gnt_1, input cpu_rvalid_1, input [63:0] cpu_rdata_1,
 
-    // Memory Interface (From DUT) - Disconnected, used for monitor only
-    input wire [2:0]   mem_a_opcode,
-    input wire [2:0]   mem_a_param,
-    input wire [2:0]   mem_a_size,
-    input wire [3:0]   mem_a_source,
-    input wire [ADDR_W-1:0]  mem_a_address,
-    input wire [7:0]   mem_a_mask,
-    input wire [DATA_W-1:0]  mem_a_data,
-    input wire         mem_a_valid,
-    
-    // Memory Interface (To DUT) - Disconnected, driven by simple_ram in TB
-    output reg          mem_a_ready, // Not used here anymore
-    output reg  [2:0]   mem_d_opcode,
-    output reg  [1:0]   mem_d_param,
-    output reg  [2:0]   mem_d_size,
-    output reg  [3:0]   mem_d_source,
-    output reg  [1:0]   mem_d_sink,
-    output reg          mem_d_denied,
-    output reg  [DATA_W-1:0]  mem_d_data,
-    output reg          mem_d_corrupt,
-    output reg          mem_d_valid,
-    input wire         mem_d_ready
+    // Core 2
+    output reg cpu_req_2, output reg cpu_we_2, output reg [7:0] cpu_be_2, 
+    output reg [63:0] cpu_addr_2, output reg [63:0] cpu_wdata_2,
+    output reg cpu_amo_2, output reg cpu_lr_2, output reg cpu_sc_2, 
+    output reg [4:0] cpu_amo_op_2, output reg cpu_amo_word_2,
+    input cpu_gnt_2, input cpu_rvalid_2, input [63:0] cpu_rdata_2,
+
+    // Core 3
+    output reg cpu_req_3, output reg cpu_we_3, output reg [7:0] cpu_be_3, 
+    output reg [63:0] cpu_addr_3, output reg [63:0] cpu_wdata_3,
+    output reg cpu_amo_3, output reg cpu_lr_3, output reg cpu_sc_3, 
+    output reg [4:0] cpu_amo_op_3, output reg cpu_amo_word_3,
+    input cpu_gnt_3, input cpu_rvalid_3, input [63:0] cpu_rdata_3,
+
+    // NEW: Backdoor Bus Interface (To TB) - Exploded per instance
+    // L1[0]
+    output reg l1_0_bkdr_valid, output reg [3:0] l1_0_bkdr_core_id, output reg [1:0] l1_0_bkdr_array_id, 
+    output reg [7:0] l1_0_bkdr_way, output reg [15:0] l1_0_bkdr_set, output reg [63:0] l1_0_bkdr_data,
+
+    // L1[1]
+    output reg l1_1_bkdr_valid, output reg [3:0] l1_1_bkdr_core_id, output reg [1:0] l1_1_bkdr_array_id, 
+    output reg [7:0] l1_1_bkdr_way, output reg [15:0] l1_1_bkdr_set, output reg [63:0] l1_1_bkdr_data,
+
+    // L1[2]
+    output reg l1_2_bkdr_valid, output reg [3:0] l1_2_bkdr_core_id, output reg [1:0] l1_2_bkdr_array_id, 
+    output reg [7:0] l1_2_bkdr_way, output reg [15:0] l1_2_bkdr_set, output reg [63:0] l1_2_bkdr_data,
+
+    // L1[3]
+    output reg l1_3_bkdr_valid, output reg [3:0] l1_3_bkdr_core_id, output reg [1:0] l1_3_bkdr_array_id, 
+    output reg [7:0] l1_3_bkdr_way, output reg [15:0] l1_3_bkdr_set, output reg [63:0] l1_3_bkdr_data,
+
+    // L2
+    output reg l2_bkdr_valid, output reg [3:0] l2_bkdr_core_id, output reg [1:0] l2_bkdr_array_id, 
+    output reg [7:0] l2_bkdr_way, output reg [15:0] l2_bkdr_set, output reg [63:0] l2_bkdr_data
 );
+
+    parameter CORES = 4; // Internal usage
 
     // Clock Generation
     initial begin
         clk = 0;
         forever #5 clk = ~clk;
     end
+
+    // Internal Arrays for Logic
+    reg [CORES-1:0] cpu_req;
+    reg [CORES-1:0] cpu_we;
+    reg [CORES*8-1:0] cpu_be;
+    reg [CORES*64-1:0] cpu_addr;
+    reg [CORES*64-1:0] cpu_wdata;
+    reg [CORES-1:0] cpu_amo;
+    reg [CORES-1:0] cpu_lr;
+    reg [CORES-1:0] cpu_sc;
+    reg [CORES*5-1:0] cpu_amo_op;
+    reg [CORES-1:0] cpu_amo_word;
+    
+    wire [CORES-1:0] cpu_gnt;
+    wire [CORES-1:0] cpu_rvalid;
+    wire [CORES*64-1:0] cpu_rdata;
+
+    // Mapping: Internal Arrays <-> Exploded Ports
+    // Input Mapping
+    assign cpu_gnt = {cpu_gnt_3, cpu_gnt_2, cpu_gnt_1, cpu_gnt_0};
+    assign cpu_rvalid = {cpu_rvalid_3, cpu_rvalid_2, cpu_rvalid_1, cpu_rvalid_0};
+    assign cpu_rdata = {cpu_rdata_3, cpu_rdata_2, cpu_rdata_1, cpu_rdata_0};
+
+    // Output Mapping (Combinational)
+    always @(*) begin
+        cpu_req_0 = cpu_req[0]; cpu_req_1 = cpu_req[1]; cpu_req_2 = cpu_req[2]; cpu_req_3 = cpu_req[3];
+        cpu_we_0 = cpu_we[0];   cpu_we_1 = cpu_we[1];   cpu_we_2 = cpu_we[2];   cpu_we_3 = cpu_we[3];
+        cpu_amo_0 = cpu_amo[0]; cpu_amo_1 = cpu_amo[1]; cpu_amo_2 = cpu_amo[2]; cpu_amo_3 = cpu_amo[3];
+        cpu_lr_0 = cpu_lr[0];   cpu_lr_1 = cpu_lr[1];   cpu_lr_2 = cpu_lr[2];   cpu_lr_3 = cpu_lr[3];
+        cpu_sc_0 = cpu_sc[0];   cpu_sc_1 = cpu_sc[1];   cpu_sc_2 = cpu_sc[2];   cpu_sc_3 = cpu_sc[3];
+        cpu_amo_word_0 = cpu_amo_word[0]; cpu_amo_word_1 = cpu_amo_word[1]; cpu_amo_word_2 = cpu_amo_word[2]; cpu_amo_word_3 = cpu_amo_word[3];
+        
+        cpu_be_0 = cpu_be[0*8 +: 8]; cpu_be_1 = cpu_be[1*8 +: 8]; cpu_be_2 = cpu_be[2*8 +: 8]; cpu_be_3 = cpu_be[3*8 +: 8];
+        cpu_addr_0 = cpu_addr[0*64 +: 64]; cpu_addr_1 = cpu_addr[1*64 +: 64]; cpu_addr_2 = cpu_addr[2*64 +: 64]; cpu_addr_3 = cpu_addr[3*64 +: 64];
+        cpu_wdata_0 = cpu_wdata[0*64 +: 64]; cpu_wdata_1 = cpu_wdata[1*64 +: 64]; cpu_wdata_2 = cpu_wdata[2*64 +: 64]; cpu_wdata_3 = cpu_wdata[3*64 +: 64];
+        cpu_amo_op_0 = cpu_amo_op[0*5 +: 5]; cpu_amo_op_1 = cpu_amo_op[1*5 +: 5]; cpu_amo_op_2 = cpu_amo_op[2*5 +: 5]; cpu_amo_op_3 = cpu_amo_op[3*5 +: 5];
+    end
+
+    // Helper task to drive backdoor bus (Dispatched)
+    task bkdr_write;
+        input [3:0] core;
+        input [1:0] arr; // 0=State/Dir, 1=Tag, 2=Data
+        input [7:0] way;
+        input [15:0] set;
+        input [63:0] val;
+        begin
+            case (core)
+                0: begin
+                    l1_0_bkdr_core_id = core; l1_0_bkdr_array_id = arr; l1_0_bkdr_way = way; l1_0_bkdr_set = set; l1_0_bkdr_data = val;
+                    l1_0_bkdr_valid = 1;
+                end
+                1: begin
+                    l1_1_bkdr_core_id = core; l1_1_bkdr_array_id = arr; l1_1_bkdr_way = way; l1_1_bkdr_set = set; l1_1_bkdr_data = val;
+                    l1_1_bkdr_valid = 1;
+                end
+                2: begin
+                    l1_2_bkdr_core_id = core; l1_2_bkdr_array_id = arr; l1_2_bkdr_way = way; l1_2_bkdr_set = set; l1_2_bkdr_data = val;
+                    l1_2_bkdr_valid = 1;
+                end
+                3: begin
+                    l1_3_bkdr_core_id = core; l1_3_bkdr_array_id = arr; l1_3_bkdr_way = way; l1_3_bkdr_set = set; l1_3_bkdr_data = val;
+                    l1_3_bkdr_valid = 1;
+                end
+                4: begin
+                    l2_bkdr_core_id = core; l2_bkdr_array_id = arr; l2_bkdr_way = way; l2_bkdr_set = set; l2_bkdr_data = val;
+                    l2_bkdr_valid = 1;
+                end
+            endcase
+            
+            @(posedge clk);
+            #1;
+            
+            // Clear Valid
+            l1_0_bkdr_valid = 0;
+            l1_1_bkdr_valid = 0;
+            l1_2_bkdr_valid = 0;
+            l1_3_bkdr_valid = 0;
+            l2_bkdr_valid = 0;
+        end
+    endtask
 
     // Tasks for Driver
     task automatic core_write;
@@ -192,46 +282,46 @@ module stimulus #(
         end
     endtask
 
+    // Updated Backdoor Init: Path changed from $root... to Backdoor Bus
     task backdoor_init_l2;
         integer w;
-        integer core;
         reg [49:0] l2_tag;
         reg [52:0] l1_tag;
         reg [63:0] data;
         begin
-            $display("[%0d cycles] Backdoor initializing L2 Set 0 (and partial L1)...", $time/10);
+            $display("[%0d cycles] Backdoor initializing L2 Set 0 (and partial L1) via Bus...", $time/10);
             for (w = 0; w < 16; w = w + 1) begin
-                l2_tag = w; // Addr = w << 14. L2 Tag = Addr >> 14 = w.
-                l1_tag = w << 3; // Addr = w << 14. L1 Tag = Addr >> 11 = w << 3.
+                l2_tag = w; 
+                l1_tag = w << 3; 
+                data = w << 14; 
                 
-                // 1. L2 Directory: Valid=1, Sharers={C1,C0}=11, Owner=0, Dirty=0
-                // Value = 9'h07
-                $root.rv64g_cache_system_stress_tb.dut.l2.directory.ram[0][w*9 +: 9] = 9'h07;
+                // 1. L2 Directory: Valid=1, Sharers={C1,C0}=11, Owner=0, Dirty=0 -> 9'h07
+                bkdr_write(4, 0, w, 0, 64'h07);
 
                 // 2. L2 Tag Array: Way w, Set 0
-                $root.rv64g_cache_system_stress_tb.dut.l2.arrays.tag_q[w][0] = l2_tag;
+                bkdr_write(4, 1, w, 0, {14'b0, l2_tag}); // Pad to 64
 
                 // 3. L2 Data Array: Way w, Set 0, Word 0
-                data = w << 14; 
-                $root.rv64g_cache_system_stress_tb.dut.l2.arrays.data_q[w][0] = data;
+                bkdr_write(4, 2, w, 0, data);
 
-                // 4. L1 Backdoor Init (Only for first 8 lines -> Ways 0-7 map to L1 Ways 0-7)
+                // 4. L1 Backdoor Init (Ways 0-7)
                 if (w < 8) begin
-                    // Initialize Core 0 L1
-                    $root.rv64g_cache_system_stress_tb.dut.gen_l1[0].l1.u_arrays.state_q[w][0] = 2'b01;
-                    $root.rv64g_cache_system_stress_tb.dut.gen_l1[0].l1.u_arrays.tag_q[w][0] = l1_tag;
-                    $root.rv64g_cache_system_stress_tb.dut.gen_l1[0].l1.u_arrays.data_q[w][0] = data;
+                    // Core 0 L1: State=1(S), Tag, Data
+                    bkdr_write(0, 0, w, 0, 64'd1); // State
+                    bkdr_write(0, 1, w, 0, {11'b0, l1_tag}); // Tag
+                    bkdr_write(0, 2, w, 0, data); // Data
 
-                    // Initialize Core 1 L1
-                    $root.rv64g_cache_system_stress_tb.dut.gen_l1[1].l1.u_arrays.state_q[w][0] = 2'b01;
-                    $root.rv64g_cache_system_stress_tb.dut.gen_l1[1].l1.u_arrays.tag_q[w][0] = l1_tag;
-                    $root.rv64g_cache_system_stress_tb.dut.gen_l1[1].l1.u_arrays.data_q[w][0] = data;
+                    // Core 1 L1
+                    bkdr_write(1, 0, w, 0, 64'd1);
+                    bkdr_write(1, 1, w, 0, {11'b0, l1_tag});
+                    bkdr_write(1, 2, w, 0, data);
                 end
             end
-            $display("[%0d cycles] L2 Set 0 Initialized (16 ways). L1 Set 0 Initialized (8 ways, consistent with L2 ways 0-7).", $time/10);
+            $display("[%0d cycles] L2 Set 0 Initialized (16 ways). L1 Set 0 Initialized (8 ways).", $time/10);
         end
     endtask
 
+    // Updated Backdoor Init
     task init_coherence_state;
         input [63:0] addr;
         input [3:0] sharers; // 4-bit mask
@@ -239,12 +329,14 @@ module stimulus #(
         input [1:0] state; // 0=N, 1=B, 2=T, 3=TT
         input [63:0] val;
         
-        integer c;
         reg [49:0] l2_tag;
         reg [52:0] l1_tag;
         reg [7:0] l2_set;
         reg [4:0] l1_set;
         reg [3:0] way;
+        reg [63:0] dir_entry;
+        reg [1:0]  l1_state;
+        integer k;
         begin
             l2_set = addr[13:6];
             l1_set = addr[10:6];
@@ -256,72 +348,34 @@ module stimulus #(
                      $time/10, addr, sharers, owner, state, val);
 
             // 1. Init L2 Directory
-            // Structure: {dirty, owner_id, owner_valid, sharers, valid}
-            $root.rv64g_cache_system_stress_tb.dut.l2.directory.ram[l2_set][way*9 + 0] = 1'b1; // Valid
-            $root.rv64g_cache_system_stress_tb.dut.l2.directory.ram[l2_set][way*9 + 1 +: 4] = sharers;
-            $root.rv64g_cache_system_stress_tb.dut.l2.directory.ram[l2_set][way*9 + 5] = (state >= 2);
-            $root.rv64g_cache_system_stress_tb.dut.l2.directory.ram[l2_set][way*9 + 6 +: 2] = owner;
-            $root.rv64g_cache_system_stress_tb.dut.l2.directory.ram[l2_set][way*9 + 8] = (state == 3);
+            dir_entry = 0;
+            dir_entry[0] = 1'b1;
+            dir_entry[4:1] = sharers;
+            dir_entry[5] = (state >= 2);
+            dir_entry[7:6] = owner;
+            dir_entry[8] = (state == 3);
+            
+            bkdr_write(4, 0, way, {8'b0, l2_set}, dir_entry);
 
             // 2. Init L2 Arrays (Tag/Data)
-            $root.rv64g_cache_system_stress_tb.dut.l2.arrays.tag_q[way][l2_set] = l2_tag;
-            // Flattened index: set * 8 + word
-            $root.rv64g_cache_system_stress_tb.dut.l2.arrays.data_q[way][{l2_set, 3'd0}] = val;
+            bkdr_write(4, 1, way, {8'b0, l2_set}, {14'b0, l2_tag});
+            bkdr_write(4, 2, way, {5'b0, l2_set, 3'd0}, val);
 
             // 3. Init L1 Arrays for Sharers
-            // Tool requires static indexing for generated instances.
-            // Unrolling for 4 cores.
-            
-            // Core 0
-            if (sharers[0]) begin
-                if (state == 1) // Shared
-                     $root.rv64g_cache_system_stress_tb.dut.gen_l1[0].l1.u_arrays.state_q[way][l1_set] = 2'b01; 
-                else if (owner == 0 && state == 2) // Exclusive
-                     $root.rv64g_cache_system_stress_tb.dut.gen_l1[0].l1.u_arrays.state_q[way][l1_set] = 2'b10;
-                else if (owner == 0 && state == 3) // Modified
-                     $root.rv64g_cache_system_stress_tb.dut.gen_l1[0].l1.u_arrays.state_q[way][l1_set] = 2'b11;
-                
-                $root.rv64g_cache_system_stress_tb.dut.gen_l1[0].l1.u_arrays.tag_q[way][l1_set] = l1_tag;
-                $root.rv64g_cache_system_stress_tb.dut.gen_l1[0].l1.u_arrays.data_q[way][{l1_set, 3'd0}] = val;
-            end
-
-            // Core 1
-            if (sharers[1]) begin
-                if (state == 1) 
-                     $root.rv64g_cache_system_stress_tb.dut.gen_l1[1].l1.u_arrays.state_q[way][l1_set] = 2'b01; 
-                else if (owner == 1 && state == 2) 
-                     $root.rv64g_cache_system_stress_tb.dut.gen_l1[1].l1.u_arrays.state_q[way][l1_set] = 2'b10;
-                else if (owner == 1 && state == 3) 
-                     $root.rv64g_cache_system_stress_tb.dut.gen_l1[1].l1.u_arrays.state_q[way][l1_set] = 2'b11;
-                
-                $root.rv64g_cache_system_stress_tb.dut.gen_l1[1].l1.u_arrays.tag_q[way][l1_set] = l1_tag;
-                $root.rv64g_cache_system_stress_tb.dut.gen_l1[1].l1.u_arrays.data_q[way][{l1_set, 3'd0}] = val;
-            end
-
-            // Core 2
-            if (sharers[2]) begin
-                if (state == 1) 
-                     $root.rv64g_cache_system_stress_tb.dut.gen_l1[2].l1.u_arrays.state_q[way][l1_set] = 2'b01; 
-                else if (owner == 2 && state == 2) 
-                     $root.rv64g_cache_system_stress_tb.dut.gen_l1[2].l1.u_arrays.state_q[way][l1_set] = 2'b10;
-                else if (owner == 2 && state == 3) 
-                     $root.rv64g_cache_system_stress_tb.dut.gen_l1[2].l1.u_arrays.state_q[way][l1_set] = 2'b11;
-                
-                $root.rv64g_cache_system_stress_tb.dut.gen_l1[2].l1.u_arrays.tag_q[way][l1_set] = l1_tag;
-                $root.rv64g_cache_system_stress_tb.dut.gen_l1[2].l1.u_arrays.data_q[way][{l1_set, 3'd0}] = val;
-            end
-
-            // Core 3
-            if (sharers[3]) begin
-                if (state == 1) 
-                     $root.rv64g_cache_system_stress_tb.dut.gen_l1[3].l1.u_arrays.state_q[way][l1_set] = 2'b01; 
-                else if (owner == 3 && state == 2) 
-                     $root.rv64g_cache_system_stress_tb.dut.gen_l1[3].l1.u_arrays.state_q[way][l1_set] = 2'b10;
-                else if (owner == 3 && state == 3) 
-                     $root.rv64g_cache_system_stress_tb.dut.gen_l1[3].l1.u_arrays.state_q[way][l1_set] = 2'b11;
-                
-                $root.rv64g_cache_system_stress_tb.dut.gen_l1[3].l1.u_arrays.tag_q[way][l1_set] = l1_tag;
-                $root.rv64g_cache_system_stress_tb.dut.gen_l1[3].l1.u_arrays.data_q[way][{l1_set, 3'd0}] = val;
+            // Cycle through 4 cores
+            for (k=0; k<4; k=k+1) begin
+                if (sharers[k]) begin
+                     l1_state = 2'b01; // Shared default
+                     if (owner == k[1:0]) begin
+                         if (state == 2) l1_state = 2'b10; // Exclusive
+                         if (state == 3) l1_state = 2'b11; // Modified
+                     end
+                     
+                     bkdr_write(k[3:0], 0, way, {11'b0, l1_set}, {62'b0, l1_state});
+                     bkdr_write(k[3:0], 1, way, {11'b0, l1_set}, {11'b0, l1_tag});
+                     // L1 Data: [way][{l1_set, 3'd0}]
+                     bkdr_write(k[3:0], 2, way, {8'b0, l1_set, 3'd0}, val);
+                end
             end
         end
     endtask
@@ -334,35 +388,33 @@ module stimulus #(
 
     initial begin
         rst_n = 0;
+        
+        // Init internal arrays
         cpu_req = 0;
         cpu_we = 0;
         cpu_addr = 0;
-        
+        cpu_wdata = 0;
+        cpu_be = 0;
         cpu_amo = 0;
         cpu_lr = 0;
         cpu_sc = 0;
         cpu_amo_op = 0;
         cpu_amo_word = 0;
         
+        // Init Backdoor ports
+        l1_0_bkdr_valid = 0; l1_0_bkdr_core_id = 0; l1_0_bkdr_array_id = 0; l1_0_bkdr_way = 0; l1_0_bkdr_set = 0; l1_0_bkdr_data = 0;
+        l1_1_bkdr_valid = 0; l1_1_bkdr_core_id = 0; l1_1_bkdr_array_id = 0; l1_1_bkdr_way = 0; l1_1_bkdr_set = 0; l1_1_bkdr_data = 0;
+        l1_2_bkdr_valid = 0; l1_2_bkdr_core_id = 0; l1_2_bkdr_array_id = 0; l1_2_bkdr_way = 0; l1_2_bkdr_set = 0; l1_2_bkdr_data = 0;
+        l1_3_bkdr_valid = 0; l1_3_bkdr_core_id = 0; l1_3_bkdr_array_id = 0; l1_3_bkdr_way = 0; l1_3_bkdr_set = 0; l1_3_bkdr_data = 0;
+        l2_bkdr_valid = 0; l2_bkdr_core_id = 0; l2_bkdr_array_id = 0; l2_bkdr_way = 0; l2_bkdr_set = 0; l2_bkdr_data = 0;
+        
         results = 0;
-
-        // Tie off unused memory ports (now handled by external module)
-        mem_a_ready = 0;
-        mem_d_opcode = 0;
-        mem_d_param = 0;
-        mem_d_size = 0;
-        mem_d_source = 0;
-        mem_d_sink = 0;
-        mem_d_denied = 0;
-        mem_d_data = 0;
-        mem_d_corrupt = 0;
-        mem_d_valid = 0;
 
         #20 rst_n = 1;
         
         #20;
         $display("\n[%0d cycles] ========================================", $time / 10);
-        $display("[%0d cycles] Starting Cache System Stress Test", $time / 10);
+        $display("[%0d cycles] Starting Cache System Stress Test - 4 Core Stimulus Architecture", $time / 10);
         $display("[%0d cycles] ========================================", $time / 10);
         $display("[%0d cycles] Test Sequence:", $time / 10);
         $display("[%0d cycles]   1. Write/Write Contention Test", $time / 10);
@@ -432,11 +484,6 @@ module stimulus #(
         $display("[%0d cycles] (Expectation: L1 HITS probe for Way 0, and invalidates it.)", $time / 10);
         
         // Access 17th line (Tag=16)
-        // This should force eviction of Way 0 (Tag=0)
-        // L2 sees Sharers=C0|C1 in Directory. Sends Probes.
-        // C0/C1 have 0-7. Probe is for 0. Hit! Reply ProbeAck (BtoN).
-        // L2 proceeds.
-        
         core_read(0, (16 << 14), read_val);
         
         $display("[%0d cycles] ========================================", $time / 10);
@@ -673,17 +720,6 @@ module stimulus #(
         $display("[%0d cycles] Fill Set 1 (Index 1) with 8 dirty lines (Tags 0-7).", $time / 10);
         $display("[%0d cycles] Access Line 9 (Tag 8). Check for Eviction.", $time / 10);
         $display("[%0d cycles] ========================================\n", $time / 10);
-
-        // Fill Set 1 with 8 dirty lines
-        // Set 1 = Addr[13:6] = 1.
-        // We vary Tag: Addr[63:14].
-        // But wait, init_coherence_state derives set/tag from addr.
-        // L1 Set = Addr[10:6]. L2 Set = Addr[13:6].
-        // To hit L1 Set 1: Addr[10:6]=1.
-        // To hit L2 Set 1: Addr[13:6]=1.
-        // So Addr = Tag << 14 | Set << 6.
-        // Set = 1. Tag = 0..7.
-        // Addr = (w << 14) | (1 << 6).
 
         for (i=0; i<8; i=i+1) begin
             // 0x10040, 0x14040, etc.

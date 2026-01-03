@@ -1,4 +1,4 @@
-`timescale 1ns/1ps
+`timescale 1ns/100ps
 `include "params.vh"
 
 module rv64g_l1_probe_tb(

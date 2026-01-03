@@ -26,7 +26,7 @@
 //
 // The old value is returned to the CPU, new value is written to memory
 
-`timescale 1ns/1ps
+`timescale 1ns/100ps
 
 module rv64g_atomic_alu (
     input  [4:0]    amo_op_i,       // AMO operation type (funct5)

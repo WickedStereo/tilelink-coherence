@@ -1,5 +1,5 @@
 // rv64g_l1_dcache.v - Top-level
-`timescale 1ns/1ps
+`timescale 1ns/100ps
 `include "params.vh"
 
 /* verilator lint_off UNUSEDSIGNAL */
@@ -79,10 +79,21 @@ module rv64g_l1_dcache (
 	// TileLink E Channel (Ack)
 	output reg         tl_e_valid_o,
 	input              tl_e_ready_i,
-	output reg  [3:0]  tl_e_sink_o
+	output reg  [3:0]  tl_e_sink_o,
+
+    // Backdoor Interface (Testbench Only)
+    // verilator lint_off UNUSEDSIGNAL
+    input              bkdr_valid_i,
+    input       [3:0]  bkdr_core_id_i,
+    input       [1:0]  bkdr_array_id_i,
+    input       [7:0]  bkdr_way_i,
+    input       [15:0] bkdr_set_i,
+    input       [63:0] bkdr_data_i
+    // verilator lint_on UNUSEDSIGNAL
 );
 
 	// Fixed configuration parameters
+    parameter integer CORE_ID = 0; // Added for verification identification
 	localparam integer ADDR_W          = 64;
 	localparam integer DATA_W          = 64;
 	// LINE_BYTES defined in params.vh
@@ -1310,5 +1321,21 @@ module rv64g_l1_dcache (
 			plru_used_way_q <= plru_used_way_n;
 		end
 	end
+
+    // ========================================================================
+    // Backdoor Handler
+    // ========================================================================
+    // Note: Writing directly into sub-module arrays. This relies on hierarchical
+    // access which is valid for verification.
+    
+    always @(posedge clk_i) begin
+        if (bkdr_valid_i && (bkdr_core_id_i == CORE_ID[3:0])) begin
+             case (bkdr_array_id_i)
+                2'd0: u_arrays.state_q[bkdr_way_i][bkdr_set_i] = bkdr_data_i[1:0]; 
+                2'd1: u_arrays.tag_q[bkdr_way_i][bkdr_set_i] = bkdr_data_i[TAG_W-1:0];
+                2'd2: u_arrays.data_q[bkdr_way_i][bkdr_set_i] = bkdr_data_i;
+            endcase
+        end
+    end
 
 endmodule

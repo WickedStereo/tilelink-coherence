@@ -1,4 +1,4 @@
-`timescale 1ns/1ps
+`timescale 1ns/100ps
 
 module rv64g_cache_system #(
     parameter CORES = 4,
@@ -227,7 +227,11 @@ module rv64g_cache_system #(
 
                 .tl_e_valid_o(l1_e_valid[i]),
                 .tl_e_ready_i(l1_e_ready[i]),
-                .tl_e_sink_o(l1_e_sink[i*SINK_W +: SINK_W])
+                .tl_e_sink_o(l1_e_sink[i*SINK_W +: SINK_W]),
+                
+                // Backdoor (Unused in old top)
+                .bkdr_valid_i(1'b0), .bkdr_core_id_i(4'b0), .bkdr_array_id_i(2'b0), 
+                .bkdr_way_i(8'b0), .bkdr_set_i(16'b0), .bkdr_data_i(64'b0)
             );
         end
     endgenerate
@@ -413,7 +417,11 @@ module rv64g_cache_system #(
         .mem_d_data_i(mem_d_data_i),
         .mem_d_corrupt_i(mem_d_corrupt_i),
         .mem_d_valid_i(mem_d_valid_i),
-        .mem_d_ready_o(mem_d_ready_o)
+        .mem_d_ready_o(mem_d_ready_o),
+
+        // Backdoor (Unused)
+        .bkdr_valid_i(1'b0), .bkdr_core_id_i(4'b0), .bkdr_array_id_i(2'b0),
+        .bkdr_way_i(8'b0), .bkdr_set_i(16'b0), .bkdr_data_i(64'b0)
     );
 
 endmodule

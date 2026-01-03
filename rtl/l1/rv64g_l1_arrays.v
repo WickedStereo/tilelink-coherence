@@ -1,5 +1,5 @@
 // rv64g_l1_arrays.v - Data/tag/state arrays for L1 cache
-`timescale 1ns/1ps
+`timescale 1ns/100ps
 `include "params.vh"
 
 /* verilator lint_off UNUSEDSIGNAL */
@@ -41,9 +41,11 @@ module rv64g_l1_arrays #(
 
 	// Storage arrays (flattened to 2D for Verilog-2001)
 	// data_q[way][{index,word}]
-	reg [DATA_W-1:0] data_q [0:WAYS-1][0:SETS*WORDS_PER_LINE-1];
-	reg [TAG_W-1:0]  tag_q  [0:WAYS-1][0:SETS-1];
-	reg [1:0]        state_q[0:WAYS-1][0:SETS-1];
+	// Storage arrays (flattened to 2D for Verilog-2001)
+	// data_q[way][{index,word}]
+	reg [DATA_W-1:0] data_q [0:WAYS-1][0:SETS*WORDS_PER_LINE-1] /* verilator public */;
+	reg [TAG_W-1:0]  tag_q  [0:WAYS-1][0:SETS-1] /* verilator public */;
+	reg [1:0]        state_q[0:WAYS-1][0:SETS-1] /* verilator public */;
 
 	// Computed linear word index within a set group
 	wire [LINE_ADDR_W-1:0] line_idx;

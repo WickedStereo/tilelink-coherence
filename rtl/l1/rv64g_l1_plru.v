@@ -1,5 +1,5 @@
 // rv64g_l1_plru.v - 8-way PLRU (7-bit tree) with invalid-first victim
-// `timescale 1ns/1ps
+// `timescale 1ns/100ps
 
 module rv64g_l1_plru #(
     parameter integer SETS = 32,

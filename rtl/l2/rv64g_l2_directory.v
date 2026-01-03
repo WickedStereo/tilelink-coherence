@@ -1,4 +1,4 @@
-`timescale 1ns/1ps
+`timescale 1ns/100ps
 
 /* verilator lint_off UNUSEDSIGNAL */
 
@@ -42,7 +42,7 @@ module rv64g_l2_directory #(
     // Structure: {dirty, owner_id, owner_valid, sharers, valid}
     localparam ENTRY_W = 1 + OWNER_ID_W + 1 + CORES + 1;
     
-    reg [WAYS*ENTRY_W-1:0] ram [0:SETS-1];
+    reg [WAYS*ENTRY_W-1:0] ram [0:SETS-1] /* verilator public */;
 
     // Read Logic
     wire [WAYS*ENTRY_W-1:0] rd_data_raw;

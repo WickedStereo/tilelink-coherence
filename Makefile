@@ -224,7 +224,7 @@ run_system: build_system
 
 # System Stress Test
 SYSTEM_STRESS_TB := $(SYSTEM_TB_DIR)/rv64g_cache_system_stress_tb.v
-SYSTEM_STIMULUS := $(SYSTEM_TB_DIR)/stimulus.v
+SYSTEM_STIMULUS := $(SYSTEM_TB_DIR)/test_sequencer.v $(SYSTEM_TB_DIR)/core_stimulus.v
 SYSTEM_STRESS_CPP := $(SYSTEM_TB_DIR)/sim_system_stress.cpp
 
 verilate_system_stress: clean_verilator

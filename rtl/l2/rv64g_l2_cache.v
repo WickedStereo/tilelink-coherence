@@ -1,4 +1,4 @@
-`timescale 1ns/1ps
+`timescale 1ns/100ps
 
 /* verilator lint_off UNUSEDSIGNAL */
 
@@ -75,7 +75,17 @@ module rv64g_l2_cache #(
     input  wire [DATA_W-1:0]  mem_d_data_i,
     input  wire         mem_d_corrupt_i,
     input  wire         mem_d_valid_i,
-    output wire         mem_d_ready_o
+    output wire         mem_d_ready_o,
+
+    // Backdoor Interface (Testbench Only)
+    // verilator lint_off UNUSEDSIGNAL
+    input  wire         bkdr_valid_i,
+    input  wire [3:0]   bkdr_core_id_i,
+    input  wire [1:0]   bkdr_array_id_i,
+    input  wire [7:0]   bkdr_way_i,
+    input  wire [15:0]  bkdr_set_i,
+    input  wire [63:0]  bkdr_data_i
+    // verilator lint_on UNUSEDSIGNAL
 );
 
     // Internal Signals
@@ -401,5 +411,28 @@ module rv64g_l2_cache #(
         .type_o(unused_mshr_type),
         .pending_probes_o(mshr_pending_probes)
     );
+
+    // ========================================================================
+    // Backdoor Handler
+    // ========================================================================
+    
+    always @(posedge clk_i) begin
+        if (bkdr_valid_i && (bkdr_core_id_i == 4'd4)) begin // L2 ID is 4
+             case (bkdr_array_id_i)
+                2'd0: directory.ram[bkdr_set_i][bkdr_way_i*9 +: 9] = bkdr_data_i[8:0]; // Directory Entry
+                2'd1: arrays.tag_q[bkdr_way_i][bkdr_set_i] = bkdr_data_i[49:0]; // L2 Tag
+                // Note: bkdr_set_i includes word index for Data array (linearized)
+                // L2 sets = 256. Words = 8.
+                // data_q is [WAYS][SETS*WORDS] or [WAYS][SETS] depending on impl?
+                // From prev TB: data_q[way][set]
+                // But wait, rv64g_l2_arrays.v: reg [DATA_W-1:0] data_q [0:WAYS-1][0:SETS*WORDS_PER_LINE-1];
+                // So the second index is linear.
+                // The Test Sequencer sends `bkdr_set` as the linear index for Data?
+                // In test_sequencer.v: bkdr_write(4, 2, way, {5'b0, l2_set, 3'd0}, val);
+                // Yes, it constructs it as {set, word_offset}.
+                2'd2: arrays.data_q[bkdr_way_i][bkdr_set_i] = bkdr_data_i[63:0]; 
+            endcase
+        end
+    end
 
 endmodule

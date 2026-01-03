@@ -1,5 +1,5 @@
 // Verilog-2001 simple memory model for 64-bit data, 8-byte beats
-`timescale 1ns/1ps
+`timescale 1ns/100ps
 
 module rv64g_l1_mem_model (
 	input              clk_i,

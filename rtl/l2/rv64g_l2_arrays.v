@@ -1,5 +1,5 @@
 
-`timescale 1ns/1ps
+`timescale 1ns/100ps
 // rv64g_l2_arrays.v - Data/tag arrays for 256KiB, 16-way, 64B lines
 `include "params.vh"
 
@@ -37,8 +37,10 @@ module rv64g_l2_arrays (
 
 	// Storage arrays (flattened to 2D for Verilog-2001)
 	// data_q[way][{index,word}] where {index,word} is 11-bit (0..2047)
-	reg [DATA_W-1:0] data_q [0:WAYS-1][0:SETS*WORDS_PER_LINE-1];
-	reg [TAG_W-1:0]  tag_q  [0:WAYS-1][0:SETS-1];
+	// Storage arrays (flattened to 2D for Verilog-2001)
+	// data_q[way][{index,word}] where {index,word} is 11-bit (0..2047)
+	reg [DATA_W-1:0] data_q [0:WAYS-1][0:SETS*WORDS_PER_LINE-1] /* verilator public */;
+	reg [TAG_W-1:0]  tag_q  [0:WAYS-1][0:SETS-1] /* verilator public */;
 
 	// Computed linear word index within a set group
 	wire [LINE_ADDR_W-1:0] line_idx;

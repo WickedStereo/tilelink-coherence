@@ -1,4 +1,4 @@
-`timescale 1ns/1ps
+`timescale 1ns/100ps
 
 module rv64g_l2_arrays_tb (
     input clk,
