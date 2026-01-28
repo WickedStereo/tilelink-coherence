@@ -201,6 +201,12 @@ SYSTEM_RTL := \
 $(RTL_DIR)/system/rv64g_cache_system.v \
 $(RTL_DIR)/l1/rv64g_l1_dcache.v \
 $(RTL_DIR)/l1/rv64g_l1_arrays.v \
+$(RTL_DIR)/l1/rv64g_l1_banked_arrays.v \
+$(RTL_DIR)/l1/rv64g_l1_sram_bank.v \
+$(RTL_DIR)/l1/rv64g_l1_bank_arbiter.v \
+$(RTL_DIR)/l1/rv64g_l1_crossbar.v \
+$(RTL_DIR)/l1/rv64g_l1_vlsu_hit_detect.v \
+$(RTL_DIR)/l1/rv64g_l1_vlsu_miss_handler.v \
     $(RTL_DIR)/l1/rv64g_l1_plru.v \
     $(RTL_DIR)/l1/rv64g_atomic_alu.v \
     $(RTL_DIR)/l2/rv64g_l2_cache.v \
