@@ -1,3 +1,0 @@
-Vrv64g_cache_system_tb_rv64g_l1_dcache__DepSet_h8b104f88__1.o: \
- Vrv64g_cache_system_tb_rv64g_l1_dcache__DepSet_h8b104f88__1.cpp \
- Vrv64g_cache_system_tb__pch.h Vrv64g_cache_system_tb_rv64g_l1_dcache.h

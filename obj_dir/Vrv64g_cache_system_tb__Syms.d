@@ -1,4 +1,0 @@
-Vrv64g_cache_system_tb__Syms.o: Vrv64g_cache_system_tb__Syms.cpp \
- Vrv64g_cache_system_tb__pch.h Vrv64g_cache_system_tb.h \
- Vrv64g_cache_system_tb___024root.h Vrv64g_cache_system_tb___024unit.h \
- Vrv64g_cache_system_tb_rv64g_l1_dcache.h
