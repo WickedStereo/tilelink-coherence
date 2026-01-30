@@ -227,7 +227,20 @@ module rv64g_cache_system #(
 
                 .tl_e_valid_o(l1_e_valid[i]),
                 .tl_e_ready_i(l1_e_ready[i]),
-                .tl_e_sink_o(l1_e_sink[i*SINK_W +: SINK_W])
+                .tl_e_sink_o(l1_e_sink[i*SINK_W +: SINK_W]),
+
+                // VLSU ports (tied off - no vector unit connected yet)
+                .vlsu_req_i(1'b0),
+                .vlsu_lane_valid_i(8'b0),
+                .vlsu_lane_we_i(8'b0),
+                .vlsu_lane_addr_i(512'b0),
+                .vlsu_lane_wdata_i(512'b0),
+                .vlsu_lane_be_i(64'b0),
+                .vlsu_ready_o(),
+                .vlsu_done_o(),
+                .vlsu_lane_done_o(),
+                .vlsu_lane_hit_o(),
+                .vlsu_lane_rdata_o()
             );
         end
     endgenerate

@@ -9,265 +9,103 @@ No speculative features, refer to tilelink-spec-1.9.md for any clarifications.
 Every invariant must be enforced structurally, not by comments
 
 
-PHASE 0 — GLOBAL DEFINITIONS (MANDATORY FIRST)
-Step 0.1 — Define global parameters
-
-Create a single header file with:
-
-NUM_CORES = 4
-
-LINE_BYTES = 64
-
-L1_SIZE = 16KB
-
-L2_SIZE = 256KB
-
-L1_WAYS = 8
-
-L2_WAYS = 16
-
-No RTL yet. Just parameters.
-
-
-
-PHASE 1 — L1 CACHE CONTROLLER (DO ONE CORE ONLY)
-
-Only implement one L1. Replication comes later.
-
-Step 1.1 — L1 Tag + Data Arrays
-
-Implement:
-
-Adjust the exiting L1 cache code to match the requirement, 16KB. Includes changing the "outer side" interface. CPU side remains OBI.
-
-Step 1.2 — Introduce L1 States (NBTT)
-
-Add:
-
-State encoding: N=00, B=01, T=10, TT=11
-
-Rules:
-
-Hit allowed if state != N
-
-Dirty set on any store
-
-Dirty implies state → TT
-
-
-
-Step 1.3 — TileLink A & D Channels (No Probes Yet)
-
-Implement:
-
-On read miss → AcquireBlock(toBranch)
-
-On write miss → AcquireBlock(toTrunk)
-
-Accept GrantData
-
-Fill line
-
-Send GrantAck
-
-Rules:
-
-Block CPU until Grant
-
-Only one outstanding Acquire
-
-
-
-Step 1.4 — Probe Handling (Channel B + C)
-
-Add:
-
-Probe receive
-
-State downgrade logic
-
-Release / ReleaseData generation
-
-Rules:
-
-Probe preempts CPU
-
-Dirty lines must send ReleaseData
-
-After Probe, state → N
-
-
-
-PHASE 2 — TILELINK CROSSBAR (MINIMAL) [COMPLETED]
-Step 2.1 — Single-Channel Arbiter [DONE]
-
-Implement:
-
-A-channel arbiter (4→1)
-
-Round-robin
-
-Valid/ready compliant
-
-
-
-Step 2.2 — Full Channel Routing [DONE]
-
-Add:
-
-B and D demux by source/sink
-
-C and E arbitration
-
-Rules:
-
-No buffering beyond 1 skid buffer
-
-No reordering
-
-
-
-PHASE 3 — L2 CACHE CONTROLLER (DIRECTORY-FIRST)
-Step 3.1 — L2 Directory (NO DATA YET)
-
-Implement per-line:
-
-valid
-
-sharers[3:0]
-
-owner_valid
-
-owner_id[1:0]
-
-dirty
-
-Rules:
-
-dirty → owner_valid
-
-owner_valid → sharers == 0
-
-
-
-Step 3.2 — L2 Tag + Data Arrays
-
-Make changes (if any) to match the requirements. Includes changing the interface.
-
-
-
-Step 3.3 — L2 MSHR (Single Entry)
-
-Implement fields:
-
-addr
-
-req_src
-
-req_type
-
-pending_probes
-
-Rules:
-
-Reject new request if MSHR busy
-
-
-
-Step 3.4 — L2 Acquire Handling FSM [COMPLETED]
-
-FSM states:
-
-IDLE
-
-TAG_LOOKUP
-
-PROBE
-
-WAIT_PROBES
-
-GRANT
-
-COMPLETE
-
-Rules:
-
-On AcquireBlock:
-
-If no sharers → Grant
-
-Else → Probe all except requester
-
-On AcquirePerm:
-
-Probe all others
-
-Assign ownership
-
-
-
-Step 3.5 — Release Handling [COMPLETED]
-
-Implement:
-
-Accept Release / ReleaseData
-
-Update directory
-
-Clear owner when last owner releases
-
-Clear dirty after data written
-
-
-
-PHASE 4 — INCLUSION & EVICTION
-Step 4.1 — L2 Eviction Logic [COMPLETED]
-
-Rules:
-
-If line has sharers or owner → Probe all
-
-Wait for all ProbeAck/Release
-
-Then evict
-
-
-
-Step 4.2 — Memory Interface
-
-Implement:
-
-Blocking line fetch
-
-Writeback on dirty eviction
-
-
-
-PHASE 5 — SYSTEM INTEGRATION
-Step 5.1 — Replicate L1 (x4) [COMPLETED]
-
-Instantiate:
-
-4 identical L1s
-
-Unique source IDs
-
-
-
-Step 5.2 — Full-System Bring-Up [IN PROGRESS]
-
-Run:
-
-Single-core tests [COMPLETED]
-
-Two-core sharing tests [COMPLETED]
-
-Write/write contention [COMPLETED]
-
-Eviction with sharers [COMPLETED]
-
-FINAL GUIDING PRINCIPLE FOR THE AGENT
-
-Correctness before performance.
-Determinism before throughput.
-Invariants before cleverness.
+Here is the step-by-step roadmap to implementing a banked L1 Data Cache for an RVA23 Vector processor.
+
+Phase 1: Modularization (The "Split")
+Your current cache is likely a single Verilog module with one big reg [63:0] data_array [0:1023]. You must physically break this apart.
+
+Define the Bank Module: Create a standalone SRAM_Bank module.
+Capacity: Total Cache Size / Number of Banks (e.g., 32KB / 8 = 4KB per bank).
+Width: 64 bits (standard for RV64).
+Interface: Single R/W port (Address, Data_In, Write_En, Data_Out).
+Instantiate Banks: Replace your single array with 8 instances of SRAM_Bank.
+Implement Address Interleaving:
+Modify your address decoder. instead of index = addr[15:6], split it:
+bank_sel = addr[5:3] (bits immediately above byte offset).
+row_index = addr[15:6] (rest of the index).
+Scalar Muxing (The "Shim"):
+Connect the Scalar LSU to all 8 banks.
+Use bank_sel to generate a "one-hot" enable signal (only enable the target bank).
+Mux the 8 Data_Out ports back to the scalar core using bank_sel.
+Verification Point: Your scalar core should work exactly as before, just with more wiring logic.
+Phase 2: The Multi-Port Interface (The "Wide Road")
+Now that the memory is physically split, you need to allow the Vector Unit (VLSU) to talk to it.
+
+Add VLSU Ports:
+The cache controller now needs two high-level interfaces:
+Port A: Scalar LSU (1 req/cycle).
+Port B: Vector LSU (8 reqs/cycle).
+Bank Arbitration (The "Traffic Cop"):
+Each of the 8 SRAM_Bank modules now needs a 2:1 Arbiter at its input.
+Inputs: Scalar Request (if targeting this bank) vs. Vector Request (Lane i).
+Priority: Typically Scalar > Vector (to prevent OS starvation) or Round-Robin.
+Logic: If Scalar wants Bank 0 and Vector Lane 3 wants Bank 0 -> Scalar wins, Vector stalls.
+Phase 3: The Crossbar (The "Steering Wheel")
+The Vector Unit doesn't just send "Lane 0 to Bank 0." It does weird stuff (strides/indices). You need a network to route requests.
+
+The Crossbar Network: Implement an 8x8 crossbar (or steering logic) between the VLSU lanes and the 8 Banks.
+Input: 8 requests from VLSU (each with an Address and Data).
+Logic: For each request, calculate bank_sel.
+Output: Route the request to the correct Bank Arbiter.
+Conflict Detection (The "Stall Logic"):
+What if Lane 0 and Lane 4 both want Bank 2?
+Logic: You need a "Conflict Detector" circuit.
+Function: It scans all 8 vector requests. If >1 request targets the same bank, it groups them.
+Finite State Machine (FSM):
+Cycle 1: Service the first group (non-conflicting).
+Cycle 2: Service the conflicting leftovers.
+Repeat until all lanes are served.
+Phase 4: Tag Array & Coherence (The "Hard Part")
+You can't just bank the Data Array; you must handle the Tags.
+
+Banked Tag Arrays:
+Each Data Bank needs a corresponding Tag Bank.
+Why? Because you need to check hits/misses for all 8 vector requests in parallel.
+Optimization: You can sometimes keep a "Unified Tag Array" with 8 read ports (expensive) or replicate tags, but usually, banking tags 1:1 with data is the scalable way.
+Hit/Miss Logic:
+The cache controller now outputs 8 Hit/Miss signals per cycle (one per bank).
+Global Stall: If any of the 8 vector requests misses, you must stall the entire vector pipeline and trigger a refill from L2.
+Phase 5: Miss Handling (MSHRs)
+Your "blocking" cache assumes 1 miss at a time. A vector load might generate 8 misses at once (e.g., crossing a page boundary).
+
+Upgrade MSHR (Miss Status Holding Register):
+You don't need a full non-blocking cache (optional), but you need a "Vector Miss Handler."
+Logic: When a vector op triggers misses on Banks 0, 1, and 2:
+Pause the vector unit.
+Issue Refill Request for Line A (covers Bank 0).
+Issue Refill Request for Line B (covers Bank 1...).
+Wait for all refills.
+Replay the vector access.
+
+Phase 6: VLSU FSM Integration (TileLink Wiring)
+The VLSU miss handler must connect to the real TileLink channels for memory refills.
+
+TileLink Channel Wiring:
+When VLSU detects a miss, the miss handler must drive:
+- TL-A channel: AcquireBlock(NtoB or NtoT) with aligned line address
+- TL-D channel: Accept GrantData beats (8 beats for 64B line)
+- TL-E channel: Send GrantAck to complete the transaction
+
+Refill Flow:
+1. Miss handler captures miss address and way selection
+2. Issues AcquireBlock on TL-A, waits for grant
+3. GrantData beats arrive on TL-D, written to SRAM banks
+4. On last beat (beat 7): broadcast tag/state to ALL banks (critical!)
+5. Send GrantAck on TL-E
+6. Signal refill complete, transition to replay
+
+Tag Broadcast Fix:
+Since data is element-interleaved across 8 banks, but tag/state is per-line:
+- All banks must have identical tag/state for a given set/way
+- The `scalar_tag_we_i` signal triggers broadcast tag writes to all banks
+- Without this, only the last bank (bank 7) would have valid state
+
+Verification:
+Created C++ testbench `sim_vlsu_cpp.cpp` with memory model that:
+- Responds to AcquireBlock with 8-beat GrantData sequence
+- Tests cold miss (refill flow), cache hit, multi-lane hits
+- All 3 tests pass: single lane miss, single lane hit, multi-lane hit
+- System coherence test remains passing (no regressions)
+
+Status: COMPLETE ✓
+```

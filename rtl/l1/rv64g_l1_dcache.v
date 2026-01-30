@@ -1,18 +1,26 @@
-// rv64g_l1_dcache.v - Top-level
+// rv64g_l1_dcache.v - Top-level with banked arrays for Vector support
 `timescale 1ns/1ps
 `include "params.vh"
 
 /* verilator lint_off UNUSEDSIGNAL */
 /* verilator lint_off UNUSEDPARAM */
+/* verilator lint_off WIDTHEXPAND */
+/* verilator lint_off WIDTHTRUNC */
+/* verilator lint_off PINCONNECTEMPTY */
+/* verilator lint_off UNOPTFLAT */
+/* verilator lint_off MULTIDRIVEN */
 
-module rv64g_l1_dcache (
+module rv64g_l1_dcache #(
+	parameter integer NUM_LANES = 8,
+	parameter integer NUM_BANKS = 8
+) (
 	input              clk_i,
 	input              rst_ni,
 
 	// Optional maintenance
 	input              invalidate_all_i,
 
-	// CPU-side (slave-like OBI style)
+	// CPU-side Scalar Port (slave-like OBI style)
 	input              req_i,
 	input              we_i,
 	input       [7:0]  be_i,
@@ -28,6 +36,19 @@ module rv64g_l1_dcache (
     input              sc_i,           // Store-Conditional operation
     input       [4:0]  amo_op_i,       // Atomic operation type
     input              amo_word_i,     // Atomic word operation flag (1=32b, 0=64b)
+
+	// Vector LSU Port (VLSU) - 8 lanes
+	input                          vlsu_req_i,
+	input  [NUM_LANES-1:0]         vlsu_lane_valid_i,
+	input  [NUM_LANES-1:0]         vlsu_lane_we_i,
+	input  [NUM_LANES*64-1:0]      vlsu_lane_addr_i,
+	input  [NUM_LANES*64-1:0]      vlsu_lane_wdata_i,
+	input  [NUM_LANES*8-1:0]       vlsu_lane_be_i,
+	output                         vlsu_ready_o,
+	output                         vlsu_done_o,
+	output [NUM_LANES-1:0]         vlsu_lane_done_o,
+	output [NUM_LANES-1:0]         vlsu_lane_hit_o,
+	output [NUM_LANES*64-1:0]      vlsu_lane_rdata_o,
 
 	// TileLink A Channel (Request)
 	output reg         tl_a_valid_o,
@@ -131,32 +152,188 @@ module rv64g_l1_dcache (
 	                 S_PERM_REQ = 4'd8,
                      S_PROBE_RESP = 4'd9,
                      S_AMO_MODIFY = 4'd10,
-                     S_AMO_WRITE = 4'd11;
+                     S_AMO_WRITE = 4'd11,
+                     S_VLSU_MISS = 4'd12,     // VLSU miss handling
+                     S_VLSU_REPLAY = 4'd13;   // VLSU replay after refills
 
-	rv64g_l1_arrays #(
+	// VLSU interface wires for banked arrays
+	wire [NUM_BANKS*64-1:0]        vec_bank_rdata;
+	wire [NUM_BANKS*WAYS*64-1:0]   vec_bank_rdata_way;
+	wire [NUM_BANKS*WAYS*TAG_W-1:0] vec_bank_tag_way;
+	wire [NUM_BANKS*WAYS*2-1:0]    vec_bank_state_way;
+	wire [NUM_BANKS*3-1:0]         vec_bank_src_lane;
+
+	// VLSU way selection - will be connected to hit detection output
+	// Declared as wire but assigned after hit detection module
+	wire [NUM_LANES*3-1:0]         vlsu_lane_way;
+	wire [NUM_LANES*TAG_W-1:0]     vlsu_lane_tag;
+	wire [NUM_LANES*2-1:0]         vlsu_lane_state;
+	
+	// For initial bring-up: no tag/state writes from VLSU (read-only or write to existing lines)
+	assign vlsu_lane_tag   = {NUM_LANES*TAG_W{1'b0}};
+	assign vlsu_lane_state = {NUM_LANES*2{1'b0}};
+
+	// Forward declaration - vlsu_lane_way will be assigned after hit detection
+	wire [NUM_LANES*3-1:0] vlsu_hit_way_fwd;
+
+	// Connect vlsu_lane_way to hit detection results (allows stores to correct way)
+	assign vlsu_lane_way = vlsu_hit_way_fwd;
+
+	// VLSU done signal from crossbar (before miss gating)
+	wire vlsu_xbar_done;
+	wire vlsu_ready_int;
+
+	rv64g_l1_banked_arrays #(
 		.SETS(SETS),
 		.WAYS(WAYS),
 		.TAG_W(TAG_W),
-		.INDEX_W(INDEX_W)
+		.INDEX_W(INDEX_W),
+		.NUM_BANKS(NUM_BANKS),
+		.NUM_LANES(NUM_LANES)
 	) u_arrays (
 		.clk_i              (clk_i),
 		.rst_ni             (rst_ni),
 		.invalidate_all_i   (state == S_IDLE ? invalidate_all_i : 1'b0),
-		.index_i            (arr_index_w),
-		.word_sel_i         (arr_word_sel),
-		.way_sel_i          (arr_way_sel),
-		.write_en_i         (arr_write_en),
-		.state_i            (arr_state_in),
-		.be_i               (arr_be),
-		.tag_in_i           (arr_tag_in),
-		.wdata_i            (arr_wdata),
-		.rdata_selected_o   (arr_rdata_sel),
-		.tag_selected_o     (arr_tag_sel),
-		.state_selected_o   (arr_state_sel),
-		.rdata_way_flat_o   (arr_rdata_way_flat),
-		.tag_way_flat_o     (arr_tag_way_flat),
-		.state_way_flat_o   (arr_state_way_flat)
+
+		// Scalar port - always reads (combinational), writes on arr_write_en
+		.scalar_req_i       (1'b1),  // Always read to support combinational hit detection
+		.scalar_we_i        (arr_write_en),
+		.scalar_tag_we_i    (arr_tag_write_en),
+		.scalar_tag_broadcast_i(arr_tag_broadcast_en),
+		.scalar_index_i     (arr_index_w),
+		.scalar_word_i      (arr_word_sel),
+		.scalar_way_i       (arr_way_sel),
+		.scalar_be_i        (arr_be),
+		.scalar_wdata_i     (arr_wdata),
+		.scalar_tag_i       (arr_tag_in),
+		.scalar_state_i     (arr_state_in),
+		.scalar_rdata_o     (arr_rdata_sel),
+		.scalar_tag_o       (arr_tag_sel),
+		.scalar_state_o     (arr_state_sel),
+		.scalar_rdata_way_o (arr_rdata_way_flat),
+		.scalar_tag_way_o   (arr_tag_way_flat),
+		.scalar_state_way_o (arr_state_way_flat),
+
+		// Vector port (VLSU)
+		.vlsu_req_i         (vlsu_req_gated),
+		.vlsu_lane_valid_i  (vlsu_lane_valid_i),
+		.vlsu_lane_we_i     (vlsu_lane_we_i),
+		.vlsu_lane_addr_i   (vlsu_lane_addr_i),
+		.vlsu_lane_wdata_i  (vlsu_lane_wdata_i),
+		.vlsu_lane_be_i     (vlsu_lane_be_i),
+		.vlsu_lane_way_i    (vlsu_lane_way),
+		.vlsu_lane_tag_i    (vlsu_lane_tag),
+		.vlsu_lane_state_i  (vlsu_lane_state),
+		.vlsu_ready_o       (vlsu_ready_int),
+		.vlsu_done_o        (vlsu_xbar_done),  // Internal signal from crossbar
+		.vlsu_lane_done_o   (vlsu_lane_done_o),
+		.vec_bank_rdata_o   (vec_bank_rdata),
+		.vec_bank_rdata_way_o (vec_bank_rdata_way),
+		.vec_bank_tag_way_o (vec_bank_tag_way),
+		.vec_bank_state_way_o (vec_bank_state_way),
+		.vec_bank_src_lane_o (vec_bank_src_lane)
 	);
+
+	// VLSU hit detection module
+	wire [NUM_LANES-1:0]   vlsu_hit_internal;
+	wire [NUM_LANES*3-1:0] vlsu_hit_way_internal;
+	wire [NUM_LANES*2-1:0] vlsu_hit_state_internal;
+	wire                   vlsu_any_miss;
+	wire [NUM_LANES-1:0]   vlsu_lane_miss_internal;
+	wire [NUM_BANKS-1:0]   bank_active_from_xbar;
+
+	// The crossbar indicates which banks are actively processing vector requests
+	assign bank_active_from_xbar = {NUM_BANKS{vlsu_req_gated}} & vlsu_lane_valid_i;
+
+	rv64g_l1_vlsu_hit_detect #(
+		.NUM_LANES(NUM_LANES),
+		.NUM_BANKS(NUM_BANKS),
+		.WAYS     (WAYS),
+		.TAG_W    (TAG_W),
+		.INDEX_W  (INDEX_W)
+	) u_vlsu_hit (
+		.lane_addr_i      (vlsu_lane_addr_i),
+		.lane_valid_i     (vlsu_lane_valid_i & {NUM_LANES{vlsu_req_gated}}),
+		.bank_tag_way_i   (vec_bank_tag_way),
+		.bank_state_way_i (vec_bank_state_way),
+		.bank_src_lane_i  (vec_bank_src_lane),
+		.bank_active_i    (bank_active_from_xbar),
+		.lane_hit_o       (vlsu_hit_internal),
+		.lane_hit_way_o   (vlsu_hit_way_internal),
+		.lane_state_o     (vlsu_hit_state_internal),
+		.any_miss_o       (vlsu_any_miss),
+		.lane_miss_o      (vlsu_lane_miss_internal)
+	);
+
+	// Connect hit detection results to outputs
+	assign vlsu_lane_hit_o = vlsu_hit_internal;
+
+	// Forward hit way to the banked arrays for vector stores
+	assign vlsu_hit_way_fwd = vlsu_hit_way_internal;
+
+	// Route read data from the hit way for each lane
+	// Each lane gets data from its target bank, from the way that hit
+	reg [NUM_LANES*64-1:0] vlsu_rdata_mux;
+	reg [2:0] lane_bank_mux;
+	integer ln_mux, wy_mux;
+	always @(*) begin
+		vlsu_rdata_mux = {(NUM_LANES*64){1'b0}};
+		for (ln_mux = 0; ln_mux < NUM_LANES; ln_mux = ln_mux + 1) begin
+			// Get which bank this lane accessed from its address[5:3]
+			lane_bank_mux = vlsu_lane_addr_i[ln_mux*64 + 5 -: 3];
+			
+			// Get the hit way for this lane and select data from correct bank
+			for (wy_mux = 0; wy_mux < WAYS; wy_mux = wy_mux + 1) begin
+				if (vlsu_hit_way_internal[(ln_mux+1)*3-1 -: 3] == wy_mux[2:0]) begin
+					vlsu_rdata_mux[(ln_mux+1)*64-1 -: 64] = 
+						vec_bank_rdata_way[(lane_bank_mux*WAYS + wy_mux + 1)*64-1 -: 64];
+				end
+			end
+		end
+	end
+
+	assign vlsu_lane_rdata_o = vlsu_rdata_mux;
+
+	// =========================================================================
+	// VLSU Miss Handler - handles multiple concurrent misses from vector ops
+	// =========================================================================
+	wire        vlsu_miss_busy;
+	wire        vlsu_miss_ready_for_replay;
+	wire        vlsu_miss_refill_req;
+	wire [63:0] vlsu_miss_refill_addr;
+	reg         vlsu_miss_refill_done;
+	wire [3:0]  vlsu_miss_count;
+
+	// VLSU request gating: only pass request when not handling misses
+	wire vlsu_req_gated = vlsu_req_i && !vlsu_miss_busy;
+
+	rv64g_l1_vlsu_miss_handler #(
+		.NUM_LANES (NUM_LANES),
+		.TAG_W     (TAG_W),
+		.INDEX_W   (INDEX_W),
+		.MAX_MISSES(NUM_LANES)
+	) u_vlsu_miss (
+		.clk_i             (clk_i),
+		.rst_ni            (rst_ni),
+		.vlsu_req_i        (vlsu_req_i),
+		.lane_miss_i       (vlsu_lane_miss_internal),
+		.lane_addr_i       (vlsu_lane_addr_i),
+		.any_miss_i        (vlsu_any_miss),
+		.refill_req_o      (vlsu_miss_refill_req),
+		.refill_addr_o     (vlsu_miss_refill_addr),
+		.refill_done_i     (vlsu_miss_refill_done),
+		.busy_o            (vlsu_miss_busy),
+		.ready_for_replay_o(vlsu_miss_ready_for_replay),
+		.miss_count_o      (vlsu_miss_count)
+	);
+
+	// =========================================================================
+	// VLSU Done/Ready Gating - Only assert done/ready when no miss handling is active
+	// =========================================================================
+	assign vlsu_ready_o = vlsu_ready_int && !vlsu_miss_busy;
+	// When there are no misses, crossbar done is the real done
+	// When there are misses, done should only assert after miss handling and replay
+	assign vlsu_done_o = vlsu_xbar_done && !vlsu_any_miss && !vlsu_miss_busy;
 
 	// PLRU
 	wire [2:0] victim_way;
@@ -240,6 +417,8 @@ module rv64g_l1_dcache (
 	reg [2:0]         arr_word_sel;
 	reg [2:0]         arr_way_sel;
 	reg               arr_write_en;
+	reg               arr_tag_write_en;  // Broadcast tag/state write to ALL banks
+	reg               arr_tag_broadcast_en; // Broadcast control for tag/state updates
 	reg [1:0]         arr_state_in;
 	reg [7:0]         arr_be;
 	reg [TAG_W-1:0]   arr_tag_in;
@@ -353,6 +532,9 @@ module rv64g_l1_dcache (
         probe_pend_hit_n = probe_pend_hit_q;
         probe_pend_way_n = probe_pend_way_q;
 
+		// VLSU miss refill done signal
+		vlsu_miss_refill_done = 1'b0;
+
 		gnt_n    = 1'b0;
 		rvalid_n = 1'b0;
 		rdata_n  = 64'd0;
@@ -403,13 +585,15 @@ module rv64g_l1_dcache (
 		tl_e_sink_n = 4'b0;
 
 		// Array control defaults
-		arr_word_sel  = word_off;
-		arr_way_sel   = hit_way;
-		arr_write_en  = 1'b0;
-		arr_state_in  = MESI_N;
-		arr_be        = 8'h00;
-		arr_tag_in    = {TAG_W{1'b0}};
-		arr_wdata     = 64'd0;
+		arr_word_sel      = word_off;
+		arr_way_sel       = hit_way;
+		arr_write_en      = 1'b0;
+		arr_tag_write_en  = 1'b0;  // Broadcast tag write default off
+		arr_tag_broadcast_en = 1'b0;
+		arr_state_in      = MESI_N;
+		arr_be            = 8'h00;
+		arr_tag_in        = {TAG_W{1'b0}};
+		arr_wdata         = 64'd0;
 
 		plru_access_n   = 1'b0;
 		plru_used_way_n = 3'd0;
@@ -452,6 +636,9 @@ module rv64g_l1_dcache (
 						// Invalidate line (downgrade to N)
 						arr_write_en = 1'b1;
 						arr_state_in = MESI_N;
+						arr_tag_in = binv_tag;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;
 						arr_be = 8'h00;
                         
                         // Pre-fetch Beat 0
@@ -460,6 +647,9 @@ module rv64g_l1_dcache (
 						// Clean: Send ProbeAck
 						arr_write_en = 1'b1;
 						arr_state_in = MESI_N;
+						arr_tag_in = binv_tag;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;
 						arr_be = 8'h00;
 						state_n = S_PROBE_RESP;
 						probe_pend_has_data_n = 1'b0;
@@ -474,7 +664,9 @@ module rv64g_l1_dcache (
 			// Block accepting new request while invalidate_all_i asserted
 			end else if (invalidate_all_i) begin
 				// Keep outputs idle; arrays will clear valids
-			end else begin
+			// FIX: Guard CPU request path - only process if no probe pending
+			// This prevents race condition where tl_b_valid_i arrives while CPU request is being processed
+			end else if (!tl_b_valid_i) begin
             // ============ LR/SC Handling ============
             // LR (Load-Reserved) hit
             if (req_i && lr_i && hit) begin
@@ -657,6 +849,8 @@ module rv64g_l1_dcache (
 					arr_way_sel   = hit_way;
 					arr_write_en  = 1'b1;
 					arr_state_in  = MESI_TT;
+					arr_tag_write_en = 1'b1;
+					arr_tag_broadcast_en = 1'b1;
 					arr_be        = be_i;
 					arr_tag_in    = tag;
 					arr_wdata     = wdata_i;
@@ -721,6 +915,18 @@ module rv64g_l1_dcache (
 				end else begin
 					state_n = S_REF_REQ;
 				end
+			// VLSU miss handling - triggered when miss handler requests a refill
+			end else if (vlsu_miss_refill_req) begin
+				// Vector operation has cache misses - start refill sequence
+				pend_index_n   = vlsu_miss_refill_addr[INDEX_W+LINE_OFF_W-1 : LINE_OFF_W];
+				pend_tag_n     = vlsu_miss_refill_addr[63 : INDEX_W+LINE_OFF_W];
+				pend_word_n    = 3'd0;
+				pend_victim_n  = victim_way;
+				pend_is_store_n= 1'b0;  // Refill as clean for now
+				pend_evict_tag_n = arr_tag_way_flat[(((victim_way+1)*TAG_W)-1) -: TAG_W];
+				beat_n         = 3'd0;
+				pend_evict_state_n = arr_state_way_flat[victim_way*2 +: 2];
+				state_n = S_VLSU_MISS;
 			end
 			end
 		end
@@ -765,6 +971,9 @@ module rv64g_l1_dcache (
 						// Invalidate line (downgrade to N)
 						arr_write_en = 1'b1;
 						arr_state_in = MESI_N;
+						arr_tag_in = binv_tag;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;
 						arr_be = 8'h00;
                         
                         // Pre-fetch Beat 0
@@ -773,6 +982,9 @@ module rv64g_l1_dcache (
 						// Clean: Send ProbeAck
 						arr_write_en = 1'b1;
 						arr_state_in = MESI_N;
+						arr_tag_in = binv_tag;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;
 						arr_be = 8'h00;
 						state_n = S_PROBE_RESP;
 						probe_pend_has_data_n = 1'b0;
@@ -825,6 +1037,9 @@ module rv64g_l1_dcache (
 						// Invalidate line (downgrade to N)
 						arr_write_en = 1'b1;
 						arr_state_in = MESI_N;
+						arr_tag_in = binv_tag;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;
 						arr_be = 8'h00;
                         
                         // Pre-fetch Beat 0
@@ -833,6 +1048,9 @@ module rv64g_l1_dcache (
 						// Clean: Send ProbeAck
 						arr_write_en = 1'b1;
 						arr_state_in = MESI_N;
+						arr_tag_in = binv_tag;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;
 						arr_be = 8'h00;
 						state_n = S_PROBE_RESP;
 						probe_pend_has_data_n = 1'b0;
@@ -853,11 +1071,19 @@ module rv64g_l1_dcache (
 					arr_word_sel  = beat_q;
 					arr_way_sel   = pend_victim_q;
 					arr_write_en  = 1'b1;
-					// Only set state to Valid (B or T) on the LAST beat
-					arr_state_in  = (beat_q == 3'd7) ? (pend_is_store_q ? MESI_T : MESI_B) : MESI_N; 
 					arr_be        = 8'hFF;
 					arr_tag_in    = pend_tag_q;
 					arr_wdata     = tl_d_data_i;
+					// On last beat, broadcast tag/state to ALL banks
+					// On earlier beats, state is Invalid (MESI_N) and tag_write_en is 0
+					if (beat_q == 3'd7) begin
+						arr_state_in     = pend_is_store_q ? MESI_T : MESI_B;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;  // Broadcast to all banks!
+					end else begin
+						arr_state_in     = MESI_N;  // Doesn't matter, tag_write_en is 0
+						arr_tag_write_en = 1'b0;
+					end
 					
 					pend_sink_n = tl_d_sink_i; // Capture sink for Ack
 
@@ -1068,6 +1294,8 @@ module rv64g_l1_dcache (
                     // Write data
 					arr_write_en  = 1'b1;
 					arr_state_in  = MESI_TT;
+					arr_tag_write_en = 1'b1;
+					arr_tag_broadcast_en = 1'b1;
 					arr_be        = pend_amo_word_q ? 8'h0F : 8'hFF;
 					arr_tag_in    = pend_tag_q;
 					arr_wdata     = pend_wdata_q;
@@ -1092,12 +1320,18 @@ module rv64g_l1_dcache (
 				// Perform BE-merge store into freshly refilled line, set dirty, then complete write via gnt
 				arr_write_en  = 1'b1;
 				arr_state_in  = MESI_TT;
+				arr_tag_write_en = 1'b1;
+				arr_tag_broadcast_en = 1'b1;
 				arr_be        = pend_be_q;
 				arr_tag_in    = pend_tag_q;
 				arr_wdata     = pend_wdata_q;
 				gnt_n         = 1'b1;   // complete the store
 				rvalid_n      = 1'b0;
 				state_n       = S_IDLE;
+			end else if (return_state_q == S_VLSU_REPLAY) begin
+				// VLSU refill completion - signal to miss handler
+				vlsu_miss_refill_done = 1'b1;
+				state_n = S_VLSU_REPLAY;
 			end else begin
 				// Read miss completion
 				rvalid_n = 1'b1;
@@ -1119,6 +1353,8 @@ module rv64g_l1_dcache (
 			arr_way_sel   = pend_victim_q;
 			arr_write_en  = 1'b1;
 			arr_state_in  = MESI_TT;
+			arr_tag_write_en = 1'b1;
+			arr_tag_broadcast_en = 1'b1;
 			arr_be        = (pend_amo_word_q) ? 8'h0F : 8'hFF;
 			arr_tag_in    = pend_tag_q;
 			arr_wdata     = amo_new_value;
@@ -1130,6 +1366,65 @@ module rv64g_l1_dcache (
 			// Clear AMO pending flag
 			pend_is_amo_n = 1'b0;
 			state_n  = S_IDLE;
+		end
+
+		// =====================================================================
+		// VLSU Miss Handling States
+		// =====================================================================
+		S_VLSU_MISS: begin
+			// Check if victim needs writeback
+			if (arr_valid_way[pend_victim_q] && arr_dirty_way[pend_victim_q]) begin
+				state_n = S_WB_REQ;
+				pend_is_probe_n = 1'b0;
+				pend_has_data_n = 1'b1;
+				beat_n = 3'd0;  // FIX: Reset beat counter at state entry
+				return_state_n = S_VLSU_REPLAY;  // Return to VLSU_REPLAY after full refill cycle
+				// Pre-fetch Beat 0
+				arr_word_sel = 3'd0;
+				arr_way_sel = pend_victim_q;
+				tl_c_data_n = arr_rdata_sel;
+			end else if (arr_valid_way[pend_victim_q]) begin
+				state_n = S_WB_REQ;
+				pend_is_probe_n = 1'b0;
+				pend_has_data_n = 1'b0;
+				beat_n = 3'd0;  // FIX: Reset beat counter at state entry
+				return_state_n = S_VLSU_REPLAY;  // Return to VLSU_REPLAY after full refill cycle
+			end else begin
+				// No writeback needed, issue refill
+				tl_a_valid_n = 1'b1;
+				tl_a_opcode_n = A_ACQUIRE_BLOCK;
+				tl_a_param_n = NtoB;  // Get shared copy for loads
+				tl_a_size_n = 4'd6;   // 64 bytes
+				tl_a_source_n = 4'd1; // Use source 1 for VLSU refills
+				tl_a_address_n = {pend_tag_q, pend_index_q, 6'b0};
+				tl_a_mask_n = 8'hFF;
+				if (tl_a_ready_i && tl_a_valid_o) begin
+					tl_a_valid_n = 1'b0;
+					state_n = S_REF_WAIT;
+					return_state_n = S_VLSU_REPLAY;
+				end
+			end
+		end
+
+		S_VLSU_REPLAY: begin
+			// Signal to miss handler that refill is done
+			// Stay here until miss handler processes all refills
+			if (vlsu_miss_ready_for_replay) begin
+				// All refills done, return to IDLE
+				// VLSU will automatically see hits on replay
+				state_n = S_IDLE;
+			end else if (vlsu_miss_refill_req) begin
+				// More refills needed
+				pend_index_n   = vlsu_miss_refill_addr[INDEX_W+LINE_OFF_W-1 : LINE_OFF_W];
+				pend_tag_n     = vlsu_miss_refill_addr[63 : INDEX_W+LINE_OFF_W];
+				pend_word_n    = 3'd0;
+				pend_victim_n  = victim_way;
+				pend_is_store_n= 1'b0;
+				pend_evict_tag_n = arr_tag_way_flat[(((victim_way+1)*TAG_W)-1) -: TAG_W];
+				beat_n         = 3'd0;
+				pend_evict_state_n = arr_state_way_flat[victim_way*2 +: 2];
+				state_n = S_VLSU_MISS;
+			end
 		end
 
 		default: begin

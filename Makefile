@@ -5,49 +5,106 @@ VERILATOR ?= verilator
 RTL_DIR = rtl
 TB_DIR = testbench
 
-# Verilator unit test for L1 D-cache
-L1_TB_DIR := $(TB_DIR)/l1
-L1_TB := $(L1_TB_DIR)/rv64g_l1_dcache_tb.v
-L1_MEM_MODEL := $(L1_TB_DIR)/rv64g_l1_mem_model.v
-L1_CPP := $(L1_TB_DIR)/sim_main.cpp
+# Verilator flags
+VERILATOR_FLAGS := -cc -exe -Wall -Wno-fatal -trace --timing -I$(RTL_DIR) $(DBG_DEFINE)
+
+# Parameters file
 L1_PARAMS := $(RTL_DIR)/params.vh
+
+# L1 RTL sources
+L1_TB_DIR := $(TB_DIR)/l1
 L1_RTL := \
 	$(RTL_DIR)/l1/rv64g_l1_dcache.v \
 	$(RTL_DIR)/l1/rv64g_l1_arrays.v \
 	$(RTL_DIR)/l1/rv64g_l1_plru.v \
-    $(RTL_DIR)/l1/rv64g_atomic_alu.v
+	$(RTL_DIR)/l1/rv64g_atomic_alu.v \
+	$(RTL_DIR)/l1/rv64g_l1_banked_arrays.v \
+	$(RTL_DIR)/l1/rv64g_l1_sram_bank.v \
+	$(RTL_DIR)/l1/rv64g_l1_crossbar.v \
+	$(RTL_DIR)/l1/rv64g_l1_bank_arbiter.v \
+	$(RTL_DIR)/l1/rv64g_l1_vlsu_hit_detect.v \
+	$(RTL_DIR)/l1/rv64g_l1_vlsu_miss_handler.v
 
+# =============================================================================
+# L1 Unit Tests (rv64g_l1_unit_tb.v)
+# Tests: SRAM bank, banked arrays, hit detection, miss handler
+# Use TEST_SELECT=0..3 to select test
+# =============================================================================
+L1_UNIT_TB := $(L1_TB_DIR)/rv64g_l1_unit_tb.v
+L1_UNIT_CPP := $(L1_TB_DIR)/sim_l1_unit.cpp
 
-VERILATOR_FLAGS := -cc -exe -Wall -Wno-fatal -trace --timing -I$(RTL_DIR) $(DBG_DEFINE)
+# Individual unit test targets
+run_l1_sram_test: clean_verilator
+	$(VERILATOR) $(VERILATOR_FLAGS) -DTEST_SELECT=0 \
+		$(L1_UNIT_CPP) $(L1_UNIT_TB) $(L1_RTL) $(L1_PARAMS)
+	$(MAKE) -C obj_dir -f Vrv64g_l1_unit_tb.mk Vrv64g_l1_unit_tb
+	obj_dir/Vrv64g_l1_unit_tb
 
+run_l1_banked_test: clean_verilator
+	$(VERILATOR) $(VERILATOR_FLAGS) -DTEST_SELECT=1 \
+		$(L1_UNIT_CPP) $(L1_UNIT_TB) $(L1_RTL) $(L1_PARAMS)
+	$(MAKE) -C obj_dir -f Vrv64g_l1_unit_tb.mk Vrv64g_l1_unit_tb
+	obj_dir/Vrv64g_l1_unit_tb
+
+run_l1_hit_test: clean_verilator
+	$(VERILATOR) $(VERILATOR_FLAGS) -DTEST_SELECT=2 \
+		$(L1_UNIT_CPP) $(L1_UNIT_TB) $(L1_RTL) $(L1_PARAMS)
+	$(MAKE) -C obj_dir -f Vrv64g_l1_unit_tb.mk Vrv64g_l1_unit_tb
+	obj_dir/Vrv64g_l1_unit_tb
+
+run_l1_miss_handler_test: clean_verilator
+	$(VERILATOR) $(VERILATOR_FLAGS) -DTEST_SELECT=3 \
+		$(L1_UNIT_CPP) $(L1_UNIT_TB) $(L1_RTL) $(L1_PARAMS)
+	$(MAKE) -C obj_dir -f Vrv64g_l1_unit_tb.mk Vrv64g_l1_unit_tb
+	obj_dir/Vrv64g_l1_unit_tb
+
+# =============================================================================
+# L1 Integration Tests (rv64g_l1_dcache_full_tb.v)
+# Tests: Scalar ops, probe, VLSU integration, VLSU gating
+# Use TEST_SELECT=0..3 to select test
+# =============================================================================
+L1_FULL_TB := $(L1_TB_DIR)/rv64g_l1_dcache_full_tb.v
+L1_FULL_CPP := $(L1_TB_DIR)/sim_l1_full.cpp
+
+run_l1_scalar_test: clean_verilator
+	$(VERILATOR) $(VERILATOR_FLAGS) -DTEST_SELECT=0 \
+		$(L1_FULL_CPP) $(L1_FULL_TB) $(L1_RTL) $(L1_PARAMS)
+	$(MAKE) -C obj_dir -f Vrv64g_l1_dcache_full_tb.mk Vrv64g_l1_dcache_full_tb
+	obj_dir/Vrv64g_l1_dcache_full_tb
+
+run_l1_probe_test: clean_verilator
+	$(VERILATOR) $(VERILATOR_FLAGS) -DTEST_SELECT=1 \
+		$(L1_FULL_CPP) $(L1_FULL_TB) $(L1_RTL) $(L1_PARAMS)
+	$(MAKE) -C obj_dir -f Vrv64g_l1_dcache_full_tb.mk Vrv64g_l1_dcache_full_tb
+	obj_dir/Vrv64g_l1_dcache_full_tb
+
+run_l1_vlsu_test: clean_verilator
+	$(VERILATOR) $(VERILATOR_FLAGS) -DTEST_SELECT=2 \
+		$(L1_FULL_CPP) $(L1_FULL_TB) $(L1_RTL) $(L1_PARAMS)
+	$(MAKE) -C obj_dir -f Vrv64g_l1_dcache_full_tb.mk Vrv64g_l1_dcache_full_tb
+	obj_dir/Vrv64g_l1_dcache_full_tb
+
+run_l1_vlsu_gating_test: clean_verilator
+	$(VERILATOR) $(VERILATOR_FLAGS) -DTEST_SELECT=3 \
+		$(L1_FULL_CPP) $(L1_FULL_TB) $(L1_RTL) $(L1_PARAMS)
+	$(MAKE) -C obj_dir -f Vrv64g_l1_dcache_full_tb.mk Vrv64g_l1_dcache_full_tb
+	obj_dir/Vrv64g_l1_dcache_full_tb
+
+# =============================================================================
+# Run all L1 tests
+# =============================================================================
+run_l1_all: run_l1_sram_test run_l1_banked_test run_l1_hit_test run_l1_miss_handler_test \
+            run_l1_scalar_test run_l1_probe_test run_l1_vlsu_test run_l1_vlsu_gating_test
+	@echo "=== All L1 tests completed ==="
+
+# =============================================================================
+# Legacy targets (deprecated - use new consolidated tests)
+# =============================================================================
 clean:
 	rm -rf obj_dir obj_dir/wave.vcd
 
 clean_verilator:
 	rm -rf obj_dir obj_dir/wave.vcd
-
-# L1 Cache Verilator targets
-lint_l1:
-	$(VERILATOR) --lint-only -Wall -Wno-lint -I$(RTL_DIR) $(L1_RTL) $(L1_TB) $(L1_MEM_MODEL) $(L1_PARAMS)
-
-verilate_l1: clean_verilator
-	$(VERILATOR) $(VERILATOR_FLAGS) $(L1_CPP) $(L1_TB) $(L1_MEM_MODEL) $(L1_RTL) $(L1_PARAMS)
-
-build_l1: verilate_l1
-	$(MAKE) -C obj_dir -f Vrv64g_l1_dcache_tb.mk Vrv64g_l1_dcache_tb
-
-run_l1: build_l1
-	obj_dir/Vrv64g_l1_dcache_tb
-
-# L1 Probe Cache Verilator targets
-L1_PROBE_TB := $(L1_TB_DIR)/rv64g_l1_probe_tb.v
-L1_PROBE_CPP := $(L1_TB_DIR)/sim_probe.cpp
-
-lint_l1_probe:
-	$(VERILATOR) --lint-only -Wall -Wno-lint -I$(RTL_DIR) $(L1_RTL) $(L1_PROBE_TB) $(L1_PARAMS)
-
-verilate_l1_probe: clean_verilator
-	$(VERILATOR) $(VERILATOR_FLAGS) $(L1_PROBE_CPP) $(L1_PROBE_TB) $(L1_RTL) $(L1_PARAMS)
 
 # Xbar Arbiter Verilator targets
 XBAR_TB_DIR := $(TB_DIR)/xbar
@@ -173,24 +230,35 @@ build_l2_fsm: verilate_l2_fsm
 run_l2_fsm: build_l2_fsm
 	obj_dir/Vrv64g_l2_fsm_tb
 
-build_l1_probe: verilate_l1_probe
-	$(MAKE) -C obj_dir -f Vrv64g_l1_probe_tb.mk Vrv64g_l1_probe_tb
-
-run_l1_probe: build_l1_probe
-	obj_dir/Vrv64g_l1_probe_tb
-
 # Help
 help:
-	@echo "Available targets:"
-	@echo "Unit Tests:"
-	@echo "  lint_l1       - Verilator lint for L1 unit TB"
-	@echo "  build_l1      - Build L1 unit TB"
-	@echo "  run_l1        - Run L1 unit TB"
+	@echo "=== L1 Cache Tests (Consolidated) ==="
+	@echo "Unit tests (rv64g_l1_unit_tb.v):"
+	@echo "  run_l1_sram_test         - SRAM bank tag/state corruption test"
+	@echo "  run_l1_banked_test       - Banked arrays scalar/vector access"
+	@echo "  run_l1_hit_test          - VLSU hit detection"
+	@echo "  run_l1_miss_handler_test - VLSU miss handler"
 	@echo ""
-	@echo "Cleanup:"
-	@echo "  clean_verilator - Remove Verilator build outputs (obj_dir, wave.vcd)"
+	@echo "Integration tests (rv64g_l1_dcache_full_tb.v):"
+	@echo "  run_l1_scalar_test       - Scalar basic operations"
+	@echo "  run_l1_probe_test        - Probe handling"
+	@echo "  run_l1_vlsu_test         - VLSU integration"
+	@echo "  run_l1_vlsu_gating_test  - VLSU miss gating"
+	@echo ""
+	@echo "  run_l1_all               - Run all L1 tests"
+	@echo ""
+	@echo "=== Other Tests ==="
+	@echo "  run_xbar, run_demux, run_socket  - Crossbar tests"
+	@echo "  run_l2_dir, run_l2_arrays, etc.  - L2 tests"
+	@echo "  run_system, run_system_stress    - Full system tests"
+	@echo ""
+	@echo "=== Cleanup ==="
+	@echo "  clean_verilator - Remove build outputs"
 
-.PHONY: clean lint_l1 verilate_l1 build_l1 run_l1 lint_l1_probe verilate_l1_probe build_l1_probe run_l1_probe help
+.PHONY: clean clean_verilator help \
+        run_l1_sram_test run_l1_banked_test run_l1_hit_test run_l1_miss_handler_test \
+        run_l1_scalar_test run_l1_probe_test run_l1_vlsu_test run_l1_vlsu_gating_test \
+        run_l1_all
 
 
 # System Verilator targets
@@ -201,6 +269,12 @@ SYSTEM_RTL := \
 $(RTL_DIR)/system/rv64g_cache_system.v \
 $(RTL_DIR)/l1/rv64g_l1_dcache.v \
 $(RTL_DIR)/l1/rv64g_l1_arrays.v \
+$(RTL_DIR)/l1/rv64g_l1_banked_arrays.v \
+$(RTL_DIR)/l1/rv64g_l1_sram_bank.v \
+$(RTL_DIR)/l1/rv64g_l1_bank_arbiter.v \
+$(RTL_DIR)/l1/rv64g_l1_crossbar.v \
+$(RTL_DIR)/l1/rv64g_l1_vlsu_hit_detect.v \
+$(RTL_DIR)/l1/rv64g_l1_vlsu_miss_handler.v \
     $(RTL_DIR)/l1/rv64g_l1_plru.v \
     $(RTL_DIR)/l1/rv64g_atomic_alu.v \
     $(RTL_DIR)/l2/rv64g_l2_cache.v \
