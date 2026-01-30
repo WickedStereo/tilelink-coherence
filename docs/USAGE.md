@@ -91,15 +91,33 @@ docs/                   # Documentation
 | `sim_cocotb_l2` | L2 Cache cocotb tests |
 | `sim_cocotb_l2_trace` | L2 tests with VCD trace |
 | `sim_cocotb_coherence` | Multi-core coherence tests |
+| `sim_cocotb_amo_probe` | AMO + Probe concurrent tests |
 | `sim_cocotb_all` | All cocotb tests |
 
-### 3.3 Utility Targets
+### 3.3 Coverage Targets
+
+| Target | Description |
+|--------|-------------|
+| `sim_verilator_l1_cov` | L1 tests with line/toggle coverage |
+| `sim_verilator_system_cov` | System tests with coverage |
+| `sim_verilator_system_stress_cov` | Stress tests with coverage |
+| `cov_report` | Generate coverage report from .dat files |
+| `cov_all` | Run all coverage tests and generate report |
+| `clean_cov` | Remove coverage data |
+
+Coverage output is written to the `coverage/` directory:
+- `coverage/*.dat` - Raw coverage data files
+- `coverage/annotate/` - Annotated source files showing hit counts
+- `coverage/merged.dat` - Merged coverage from all tests
+
+### 3.4 Utility Targets
 
 | Target | Description |
 |--------|-------------|
 | `lint` | Lint all RTL |
-| `clean` | Remove build artifacts |
+| `clean` | Remove all build artifacts (including coverage) |
 | `clean_verilator` | Remove Verilator outputs |
+| `clean_cov` | Remove coverage data only |
 | `help` | Show available targets |
 
 ## 4. Cocotb Test Development

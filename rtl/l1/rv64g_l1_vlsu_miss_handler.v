@@ -103,6 +103,8 @@ module rv64g_l1_vlsu_miss_handler #(
     // =========================================================================
     // Capture Logic - Gather unique miss addresses
     // =========================================================================
+    // Sample miss signals on transition INTO capture state (while still in IDLE)
+    // This avoids the circular dependency where busy_o gates the hit detection
     reg [MAX_MISSES-1:0]  miss_valid_n;
     reg [LINE_ADDR_W-1:0] miss_addr_n [0:MAX_MISSES-1];
     reg [3:0]             miss_count_n;
@@ -111,6 +113,9 @@ module rv64g_l1_vlsu_miss_handler #(
     integer ln;
     reg [LINE_ADDR_W-1:0] lane_line_addr;
     reg                   is_dup;
+
+    // Determine if we're about to enter capture state (still in IDLE, about to transition)
+    wire entering_capture = (state_q == S_IDLE) && vlsu_req_i && any_miss_i;
 
     always @(*) begin
         // Defaults - hold current values
@@ -125,7 +130,9 @@ module rv64g_l1_vlsu_miss_handler #(
         is_dup = 1'b0;
 
         // Capture phase: scan all lanes and add unique misses
-        if (state_q == S_CAPTURE) begin
+        // IMPORTANT: Capture happens on the transition INTO S_CAPTURE (while still in S_IDLE)
+        // This ensures we sample the miss signals BEFORE busy_o goes high
+        if (entering_capture) begin
             // Clear for fresh capture
             miss_valid_n = {MAX_MISSES{1'b0}};
             miss_count_n = 4'd0;
@@ -171,8 +178,9 @@ module rv64g_l1_vlsu_miss_handler #(
 
             S_CAPTURE: begin
                 busy_o = 1'b1;
-                // Capture happens combinationally, move to refill
-                if (miss_count_n > 0) begin
+                // Capture happened in previous cycle (on transition from IDLE)
+                // Now move to refill if there are misses
+                if (miss_count_q > 0) begin
                     state_n = S_REFILL_REQ;
                     refill_idx_n = 4'd0;
                 end else begin
@@ -237,7 +245,8 @@ module rv64g_l1_vlsu_miss_handler #(
             miss_valid_q <= miss_valid_n;
             miss_count_q <= miss_count_n;
             refill_idx_q <= refill_idx_n;
-            if (state_q == S_CAPTURE) begin
+            // Capture miss addresses on transition INTO capture state
+            if (entering_capture) begin
                 for (idx = 0; idx < MAX_MISSES; idx = idx + 1) begin
                     miss_addr_q[idx] <= miss_addr_n[idx];
                 end

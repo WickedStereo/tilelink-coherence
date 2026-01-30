@@ -99,7 +99,17 @@ docs/                   # Documentation
 | `sim_cocotb_l2` | L2 Cache cocotb tests |
 | `sim_cocotb_l2_trace` | L2 tests with VCD trace |
 | `sim_cocotb_coherence` | Multi-core coherence tests |
+| `sim_cocotb_amo_probe` | AMO + Probe concurrent tests |
 | `sim_cocotb_all` | All cocotb tests |
+
+### Coverage Targets
+
+| Target | Description |
+|--------|-------------|
+| `sim_verilator_l1_cov` | L1 tests with coverage |
+| `sim_verilator_system_cov` | System tests with coverage |
+| `cov_report` | Generate coverage report |
+| `cov_all` | Run all coverage tests + report |
 
 ### Utility Targets
 
@@ -117,6 +127,7 @@ docs/                   # Documentation
 | [docs/INTERFACE.md](docs/INTERFACE.md) | Port and interface specification |
 | [docs/USAGE.md](docs/USAGE.md) | Detailed usage guide |
 | [docs/VERSIONS.md](docs/VERSIONS.md) | Tool versions and compatibility |
+| [docs/REVIEW_FINDINGS.md](docs/REVIEW_FINDINGS.md) | RTL review findings and recommendations |
 
 ## License
 

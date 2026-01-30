@@ -11,6 +11,9 @@ TB_RTL_DIR = tb/rtl
 # Verilator flags
 VERILATOR_FLAGS := -cc -exe -Wall -Wno-fatal -trace --timing -I$(RTL_DIR) $(DBG_DEFINE)
 
+# Verilator coverage flags (adds line and toggle coverage instrumentation)
+VERILATOR_COV_FLAGS := $(VERILATOR_FLAGS) --coverage --coverage-line --coverage-toggle
+
 # Parameters file
 L1_PARAMS := $(RTL_DIR)/params.vh
 
@@ -134,8 +137,15 @@ sim_cocotb_coherence:
 sim_cocotb_coherence_trace:
 	cd $(COCOTB_DIR) && $(PYTHON) run_l2_sim.py --clean --trace --module test_coherence
 
+# AMO + Probe concurrent tests (L1)
+sim_cocotb_amo_probe:
+	cd $(COCOTB_DIR) && $(PYTHON) run_sim.py --clean --test test_amo_probe
+
+sim_cocotb_amo_probe_trace:
+	cd $(COCOTB_DIR) && $(PYTHON) run_sim.py --clean --trace --test test_amo_probe
+
 # All cocotb tests
-sim_cocotb_all: sim_cocotb_l1 sim_cocotb_l2 sim_cocotb_coherence
+sim_cocotb_all: sim_cocotb_l1 sim_cocotb_l2 sim_cocotb_coherence sim_cocotb_amo_probe
 
 # =============================================================================
 # Lint targets
@@ -160,7 +170,7 @@ lint_l2_cocotb:
 # Cleanup
 # =============================================================================
 clean:
-	rm -rf obj_dir obj_dir/wave.vcd $(COCOTB_DIR)/sim_build $(COCOTB_DIR)/sim_build_l2
+	rm -rf obj_dir obj_dir/wave.vcd $(COCOTB_DIR)/sim_build $(COCOTB_DIR)/sim_build_l2 $(COV_DIR)
 	rm -f *.vcd
 
 clean_verilator:
@@ -428,3 +438,63 @@ build_system_stress: verilate_system_stress
 
 sim_verilator_system_stress: build_system_stress
 	obj_dir/Vrv64g_cache_system_stress_tb
+
+# ============================================================================
+# Coverage-Enabled Simulation Targets
+# ============================================================================
+# These targets compile with coverage instrumentation to generate coverage data
+# After running, use 'verilator_coverage' to analyze coverage.dat files
+
+COV_DIR := coverage
+
+# L1 Cache Coverage
+verilate_l1_full_cov: clean_verilator
+	$(VERILATOR) $(VERILATOR_COV_FLAGS) $(L1_FULL_CPP) $(L1_FULL_TB) $(L1_RTL) $(L1_PARAMS)
+
+build_l1_full_cov: verilate_l1_full_cov
+	$(MAKE) -C obj_dir -f Vrv64g_l1_dcache_full_tb.mk Vrv64g_l1_dcache_full_tb
+
+sim_verilator_l1_cov: build_l1_full_cov
+	mkdir -p $(COV_DIR)
+	obj_dir/Vrv64g_l1_dcache_full_tb +cov_file=$(COV_DIR)/l1_coverage.dat
+
+# System Cache Coverage
+verilate_system_cov: clean_verilator
+	$(VERILATOR) $(VERILATOR_COV_FLAGS) $(SYSTEM_CPP) $(SYSTEM_TB) $(SYSTEM_RTL) $(L1_PARAMS)
+
+build_system_cov: verilate_system_cov
+	$(MAKE) -C obj_dir -f Vrv64g_cache_system_tb.mk Vrv64g_cache_system_tb
+
+sim_verilator_system_cov: build_system_cov
+	mkdir -p $(COV_DIR)
+	obj_dir/Vrv64g_cache_system_tb +cov_file=$(COV_DIR)/system_coverage.dat
+
+# System Stress Test Coverage
+verilate_system_stress_cov: clean_verilator
+	$(VERILATOR) $(VERILATOR_COV_FLAGS) $(SYSTEM_STRESS_CPP) $(SYSTEM_STRESS_TB) $(SYSTEM_STIMULUS) $(TB_DIR)/system/simple_ram.v $(TB_DIR)/system/tl_monitor.v $(SYSTEM_RTL) $(L1_PARAMS)
+
+build_system_stress_cov: verilate_system_stress_cov
+	$(MAKE) -C obj_dir -f Vrv64g_cache_system_stress_tb.mk Vrv64g_cache_system_stress_tb
+
+sim_verilator_system_stress_cov: build_system_stress_cov
+	mkdir -p $(COV_DIR)
+	obj_dir/Vrv64g_cache_system_stress_tb +cov_file=$(COV_DIR)/system_stress_coverage.dat
+
+# Coverage Report Generation
+# Generates HTML report from coverage data files
+cov_report:
+	@echo "Generating coverage report..."
+	mkdir -p $(COV_DIR)/html
+	verilator_coverage --annotate $(COV_DIR)/annotate $(COV_DIR)/*.dat
+	verilator_coverage --write $(COV_DIR)/merged.dat $(COV_DIR)/*.dat
+	@echo "Coverage data merged to $(COV_DIR)/merged.dat"
+	@echo "Annotated source in $(COV_DIR)/annotate/"
+
+# Run all coverage simulations and generate report
+cov_all: sim_verilator_l1_cov sim_verilator_system_cov sim_verilator_system_stress_cov cov_report
+
+# Clean coverage data
+clean_cov:
+	rm -rf $(COV_DIR)
+
+.PHONY: sim_verilator_l1_cov sim_verilator_system_cov sim_verilator_system_stress_cov cov_report cov_all clean_cov
