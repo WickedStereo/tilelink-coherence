@@ -79,9 +79,12 @@ rtl/
   l2/                # L2 Cache RTL
   system/            # Top-level system wrapper
   xbar/              # TileLink Interconnect components
-testbench/
-  l1/                # L1 Unit Tests
-  l2/                # L2 Unit Tests
-  system/            # Full System Tests (Stress tests)
-  xbar/              # Interconnect Tests
+tb/
+  rtl/               # Shared DUT wrappers
+  cocotb/            # Python cocotb tests
+  verilator/         # Standalone Verilator tests
+    l1/              # L1 Unit Tests
+    l2/              # L2 Unit Tests
+    system/          # Full System Tests
+    xbar/            # Interconnect Tests
 ```

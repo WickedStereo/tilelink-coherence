@@ -3,22 +3,22 @@
 ## 2026-01-29
 ### Tests
 - **Consolidated L1 testbenches** from 12 files down to 2:
-	- [rv64g_l1_unit_tb.v](testbench/l1/rv64g_l1_unit_tb.v) - Unit tests for components:
+	- [rv64g_l1_unit_tb.v](tb/verilator/l1/rv64g_l1_unit_tb.v) - Unit tests for components:
 		- Test 0: SRAM bank tag/state corruption
 		- Test 1: Banked arrays (scalar/vector access)
 		- Test 2: VLSU hit detection
 		- Test 3: VLSU miss handler
-	- [rv64g_l1_dcache_full_tb.v](testbench/l1/rv64g_l1_dcache_full_tb.v) - Integration tests:
+	- [rv64g_l1_dcache_full_tb.v](tb/verilator/l1/rv64g_l1_dcache_full_tb.v) - Integration tests:
 		- Test 0: Scalar basic operations (read/write hit/miss)
 		- Test 1: Probe handling (coherence invalidations)
 		- Test 2: VLSU integration with memory model
 		- Test 3: VLSU miss gating regression
-	- [sim_l1_unified.cpp](testbench/l1/sim_l1_unified.cpp) - Single C++ harness for all L1 tests
+	- [sim_l1_unit.cpp](tb/verilator/l1/sim_l1_unit.cpp), [sim_l1_full.cpp](tb/verilator/l1/sim_l1_full.cpp) - C++ harnesses
 - Test selection via `+define+TEST_SELECT=N` at Verilator compile time
 - New Makefile targets:
-	- `run_l1_sram_test`, `run_l1_banked_test`, `run_l1_hit_test`, `run_l1_miss_handler_test`
-	- `run_l1_scalar_test`, `run_l1_probe_test`, `run_l1_vlsu_test`, `run_l1_vlsu_gating_test`
-	- `run_l1_all` - Run all L1 tests
+	- `sim_verilator_l1_sram`, `sim_verilator_l1_banked`, `sim_verilator_l1_hit`, `sim_verilator_l1_miss_handler`
+	- `sim_verilator_l1_scalar`, `sim_verilator_l1_probe`, `sim_verilator_l1_vlsu`, `sim_verilator_l1_vlsu_gating`
+	- `sim_verilator_l1_all` - Run all L1 tests
 
 ### RTL fixes
 - L1 D$ VLSU miss gating:
