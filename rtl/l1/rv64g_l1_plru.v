@@ -93,12 +93,15 @@ module rv64g_l1_plru #(
 		end
 		plru_leaf_victim = {d2, d1, d0};
 
-		// Invalid-first preference
+		// Invalid-first preference with rotation based on PLRU tree
+		// FIX: Instead of always selecting lowest-numbered invalid way,
+		// rotate starting from PLRU victim to distribute allocations
 		has_invalid = 1'b0;
 		invalid_choice = 3'd0;
+		// Start searching from PLRU leaf victim position for better distribution
 		for (k = 0; k < NUM_WAYS; k = k + 1) begin
-			if (!valid_i[k] && !has_invalid) begin
-				invalid_choice = k[2:0];
+			if (!valid_i[(plru_leaf_victim + k[2:0]) % NUM_WAYS] && !has_invalid) begin
+				invalid_choice = (plru_leaf_victim + k[2:0]) % NUM_WAYS;
 				has_invalid = 1'b1;
 			end
 		end

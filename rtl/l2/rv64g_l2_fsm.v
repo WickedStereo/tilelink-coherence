@@ -748,7 +748,9 @@ wire [CID_W-1:0] c_core_id = c_source_i[SOURCE_W-1 -: CID_W];
                             dir_wr_sharers_o = (1 << req_core_id); // Only requester
                             dir_wr_owner_valid_o = 1'b1;
                             dir_wr_owner_id_o = req_core_id;
-                            dir_wr_dirty_o = 1'b1;
+                            // FIX: NtoT grants exclusive but CLEAN - dirty only set on actual write
+                            // AcquireBlock NtoT is read-exclusive, not write
+                            dir_wr_dirty_o = 1'b0;
                         end
                     end else begin // AcquirePerm (Write)
                         dir_wr_sharers_o = (1 << req_core_id); // Only requester

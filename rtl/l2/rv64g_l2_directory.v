@@ -87,27 +87,28 @@ module rv64g_l2_directory #(
     wire [ENTRY_W-1:0] wr_entry_packed;
     assign wr_entry_packed = {safe_dirty, safe_owner_id, safe_owner_valid, safe_sharers, safe_valid};
 
+    // FIX: Added proper synchronous reset for ASIC compatibility
+    // The initial block is kept for simulation but reset_n provides runtime reset
+    integer i;
+    
     always @(posedge clk) begin
-        if (we_i) begin
+        if (!rst_n) begin
+            // Synchronous reset - invalidate all entries
+            for (i = 0; i < SETS; i = i + 1) begin
+                ram[i] <= {(WAYS*ENTRY_W){1'b0}};
+            end
+        end else if (we_i) begin
             ram[wr_set_i][wr_way_i*ENTRY_W +: ENTRY_W] <= wr_entry_packed;
         end
     end
     
-    // Reset logic? 
-    // Large arrays usually aren't reset. We rely on initialization or valid bits.
-    // But for simulation/FPGA, we might want to zero it.
-    // For ASIC, we'd loop through and invalidate.
-    // Let's add a simulation-only initialization or a reset loop if strictly needed.
-    // For now, let's assume the controller invalidates on startup or we use a loop.
-    // To keep it simple and synthesizable as RAM, no async reset on the array.
-    // We can add a "reset_all" state machine in the controller later.
-            integer i;
-
-    // However, for the testbench to work without X, let's initialize in `initial`.
+    // Simulation-only initialization (non-synthesizable for ASIC, works for FPGA/sim)
+    // synthesis translate_off
     initial begin
         for (i = 0; i < SETS; i = i + 1) begin
             ram[i] = 0;
         end
     end
+    // synthesis translate_on
 
 endmodule

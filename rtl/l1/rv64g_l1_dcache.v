@@ -653,7 +653,9 @@ module rv64g_l1_dcache #(
 			// Block accepting new request while invalidate_all_i asserted
 			end else if (invalidate_all_i) begin
 				// Keep outputs idle; arrays will clear valids
-			end else begin
+			// FIX: Guard CPU request path - only process if no probe pending
+			// This prevents race condition where tl_b_valid_i arrives while CPU request is being processed
+			end else if (!tl_b_valid_i) begin
             // ============ LR/SC Handling ============
             // LR (Load-Reserved) hit
             if (req_i && lr_i && hit) begin
@@ -1343,6 +1345,7 @@ module rv64g_l1_dcache #(
 				state_n = S_WB_REQ;
 				pend_is_probe_n = 1'b0;
 				pend_has_data_n = 1'b1;
+				beat_n = 3'd0;  // FIX: Reset beat counter at state entry
 				return_state_n = S_VLSU_REPLAY;  // Return to VLSU_REPLAY after full refill cycle
 				// Pre-fetch Beat 0
 				arr_word_sel = 3'd0;
@@ -1352,6 +1355,7 @@ module rv64g_l1_dcache #(
 				state_n = S_WB_REQ;
 				pend_is_probe_n = 1'b0;
 				pend_has_data_n = 1'b0;
+				beat_n = 3'd0;  // FIX: Reset beat counter at state entry
 				return_state_n = S_VLSU_REPLAY;  // Return to VLSU_REPLAY after full refill cycle
 			end else begin
 				// No writeback needed, issue refill
