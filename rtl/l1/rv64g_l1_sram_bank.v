@@ -120,7 +120,7 @@ module rv64g_l1_sram_bank #(
                 data_q[way_i][line_addr] <= (wdata_i & be_mask) |
                                             (data_q[way_i][line_addr] & ~be_mask);
             end
-            if (tag_we_i || we_i) begin
+            if (tag_we_i) begin
                 // Tag and state update
                 tag_q[way_i][index_i]   <= tag_i;
                 state_q[way_i][index_i] <= state_i;

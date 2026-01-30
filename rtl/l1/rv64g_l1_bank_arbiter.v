@@ -22,7 +22,8 @@ module rv64g_l1_bank_arbiter #(
     // Scalar port (Port A) - higher priority
     input               scalar_req_i,
     input               scalar_we_i,
-    input               scalar_tag_we_i,  // Broadcast tag/state write enable
+    input               scalar_tag_we_i,  // Tag/state write enable (per-bank or broadcast)
+    input               scalar_tag_broadcast_i, // Broadcast tag/state to all banks
     input  [INDEX_W-1:0] scalar_index_i,
     input  [2:0]        scalar_word_i,
     input  [2:0]        scalar_way_i,
@@ -70,7 +71,7 @@ module rv64g_l1_bank_arbiter #(
 
     // Tag broadcast is a scalar operation that writes tag/state to ALL banks
     // It should take priority even when this isn't the data target bank
-    assign tag_broadcast = scalar_tag_we_i && !scalar_req_i;  // Broadcast, not data target
+    assign tag_broadcast = scalar_tag_broadcast_i;
     assign scalar_grant = scalar_req_i || tag_broadcast;
     assign vec_grant    = vec_req_i && !scalar_grant;
 

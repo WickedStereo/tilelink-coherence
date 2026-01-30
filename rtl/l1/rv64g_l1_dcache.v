@@ -181,6 +181,7 @@ module rv64g_l1_dcache #(
 
 	// VLSU done signal from crossbar (before miss gating)
 	wire vlsu_xbar_done;
+	wire vlsu_ready_int;
 
 	rv64g_l1_banked_arrays #(
 		.SETS(SETS),
@@ -197,7 +198,8 @@ module rv64g_l1_dcache #(
 		// Scalar port - always reads (combinational), writes on arr_write_en
 		.scalar_req_i       (1'b1),  // Always read to support combinational hit detection
 		.scalar_we_i        (arr_write_en),
-		.scalar_tag_we_i    (arr_tag_write_en),  // Broadcast tag/state write to ALL banks
+		.scalar_tag_we_i    (arr_tag_write_en),
+		.scalar_tag_broadcast_i(arr_tag_broadcast_en),
 		.scalar_index_i     (arr_index_w),
 		.scalar_word_i      (arr_word_sel),
 		.scalar_way_i       (arr_way_sel),
@@ -213,7 +215,7 @@ module rv64g_l1_dcache #(
 		.scalar_state_way_o (arr_state_way_flat),
 
 		// Vector port (VLSU)
-		.vlsu_req_i         (vlsu_req_i),
+		.vlsu_req_i         (vlsu_req_gated),
 		.vlsu_lane_valid_i  (vlsu_lane_valid_i),
 		.vlsu_lane_we_i     (vlsu_lane_we_i),
 		.vlsu_lane_addr_i   (vlsu_lane_addr_i),
@@ -222,7 +224,7 @@ module rv64g_l1_dcache #(
 		.vlsu_lane_way_i    (vlsu_lane_way),
 		.vlsu_lane_tag_i    (vlsu_lane_tag),
 		.vlsu_lane_state_i  (vlsu_lane_state),
-		.vlsu_ready_o       (vlsu_ready_o),
+		.vlsu_ready_o       (vlsu_ready_int),
 		.vlsu_done_o        (vlsu_xbar_done),  // Internal signal from crossbar
 		.vlsu_lane_done_o   (vlsu_lane_done_o),
 		.vec_bank_rdata_o   (vec_bank_rdata),
@@ -241,7 +243,7 @@ module rv64g_l1_dcache #(
 	wire [NUM_BANKS-1:0]   bank_active_from_xbar;
 
 	// The crossbar indicates which banks are actively processing vector requests
-	assign bank_active_from_xbar = {NUM_BANKS{vlsu_req_i}} & vlsu_lane_valid_i;
+	assign bank_active_from_xbar = {NUM_BANKS{vlsu_req_gated}} & vlsu_lane_valid_i;
 
 	rv64g_l1_vlsu_hit_detect #(
 		.NUM_LANES(NUM_LANES),
@@ -251,7 +253,7 @@ module rv64g_l1_dcache #(
 		.INDEX_W  (INDEX_W)
 	) u_vlsu_hit (
 		.lane_addr_i      (vlsu_lane_addr_i),
-		.lane_valid_i     (vlsu_lane_valid_i & {NUM_LANES{vlsu_req_i}}),
+		.lane_valid_i     (vlsu_lane_valid_i & {NUM_LANES{vlsu_req_gated}}),
 		.bank_tag_way_i   (vec_bank_tag_way),
 		.bank_state_way_i (vec_bank_state_way),
 		.bank_src_lane_i  (vec_bank_src_lane),
@@ -326,8 +328,9 @@ module rv64g_l1_dcache #(
 	);
 
 	// =========================================================================
-	// VLSU Done Gating - Only assert done when no miss handling is active
+	// VLSU Done/Ready Gating - Only assert done/ready when no miss handling is active
 	// =========================================================================
+	assign vlsu_ready_o = vlsu_ready_int && !vlsu_miss_busy;
 	// When there are no misses, crossbar done is the real done
 	// When there are misses, done should only assert after miss handling and replay
 	assign vlsu_done_o = vlsu_xbar_done && !vlsu_any_miss && !vlsu_miss_busy;
@@ -415,6 +418,7 @@ module rv64g_l1_dcache #(
 	reg [2:0]         arr_way_sel;
 	reg               arr_write_en;
 	reg               arr_tag_write_en;  // Broadcast tag/state write to ALL banks
+	reg               arr_tag_broadcast_en; // Broadcast control for tag/state updates
 	reg [1:0]         arr_state_in;
 	reg [7:0]         arr_be;
 	reg [TAG_W-1:0]   arr_tag_in;
@@ -585,6 +589,7 @@ module rv64g_l1_dcache #(
 		arr_way_sel       = hit_way;
 		arr_write_en      = 1'b0;
 		arr_tag_write_en  = 1'b0;  // Broadcast tag write default off
+		arr_tag_broadcast_en = 1'b0;
 		arr_state_in      = MESI_N;
 		arr_be            = 8'h00;
 		arr_tag_in        = {TAG_W{1'b0}};
@@ -631,6 +636,9 @@ module rv64g_l1_dcache #(
 						// Invalidate line (downgrade to N)
 						arr_write_en = 1'b1;
 						arr_state_in = MESI_N;
+						arr_tag_in = binv_tag;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;
 						arr_be = 8'h00;
                         
                         // Pre-fetch Beat 0
@@ -639,6 +647,9 @@ module rv64g_l1_dcache #(
 						// Clean: Send ProbeAck
 						arr_write_en = 1'b1;
 						arr_state_in = MESI_N;
+						arr_tag_in = binv_tag;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;
 						arr_be = 8'h00;
 						state_n = S_PROBE_RESP;
 						probe_pend_has_data_n = 1'b0;
@@ -838,6 +849,8 @@ module rv64g_l1_dcache #(
 					arr_way_sel   = hit_way;
 					arr_write_en  = 1'b1;
 					arr_state_in  = MESI_TT;
+					arr_tag_write_en = 1'b1;
+					arr_tag_broadcast_en = 1'b1;
 					arr_be        = be_i;
 					arr_tag_in    = tag;
 					arr_wdata     = wdata_i;
@@ -958,6 +971,9 @@ module rv64g_l1_dcache #(
 						// Invalidate line (downgrade to N)
 						arr_write_en = 1'b1;
 						arr_state_in = MESI_N;
+						arr_tag_in = binv_tag;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;
 						arr_be = 8'h00;
                         
                         // Pre-fetch Beat 0
@@ -966,6 +982,9 @@ module rv64g_l1_dcache #(
 						// Clean: Send ProbeAck
 						arr_write_en = 1'b1;
 						arr_state_in = MESI_N;
+						arr_tag_in = binv_tag;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;
 						arr_be = 8'h00;
 						state_n = S_PROBE_RESP;
 						probe_pend_has_data_n = 1'b0;
@@ -1018,6 +1037,9 @@ module rv64g_l1_dcache #(
 						// Invalidate line (downgrade to N)
 						arr_write_en = 1'b1;
 						arr_state_in = MESI_N;
+						arr_tag_in = binv_tag;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;
 						arr_be = 8'h00;
                         
                         // Pre-fetch Beat 0
@@ -1026,6 +1048,9 @@ module rv64g_l1_dcache #(
 						// Clean: Send ProbeAck
 						arr_write_en = 1'b1;
 						arr_state_in = MESI_N;
+						arr_tag_in = binv_tag;
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;
 						arr_be = 8'h00;
 						state_n = S_PROBE_RESP;
 						probe_pend_has_data_n = 1'b0;
@@ -1053,7 +1078,8 @@ module rv64g_l1_dcache #(
 					// On earlier beats, state is Invalid (MESI_N) and tag_write_en is 0
 					if (beat_q == 3'd7) begin
 						arr_state_in     = pend_is_store_q ? MESI_T : MESI_B;
-						arr_tag_write_en = 1'b1;  // Broadcast to all banks!
+						arr_tag_write_en = 1'b1;
+						arr_tag_broadcast_en = 1'b1;  // Broadcast to all banks!
 					end else begin
 						arr_state_in     = MESI_N;  // Doesn't matter, tag_write_en is 0
 						arr_tag_write_en = 1'b0;
@@ -1268,6 +1294,8 @@ module rv64g_l1_dcache #(
                     // Write data
 					arr_write_en  = 1'b1;
 					arr_state_in  = MESI_TT;
+					arr_tag_write_en = 1'b1;
+					arr_tag_broadcast_en = 1'b1;
 					arr_be        = pend_amo_word_q ? 8'h0F : 8'hFF;
 					arr_tag_in    = pend_tag_q;
 					arr_wdata     = pend_wdata_q;
@@ -1292,6 +1320,8 @@ module rv64g_l1_dcache #(
 				// Perform BE-merge store into freshly refilled line, set dirty, then complete write via gnt
 				arr_write_en  = 1'b1;
 				arr_state_in  = MESI_TT;
+				arr_tag_write_en = 1'b1;
+				arr_tag_broadcast_en = 1'b1;
 				arr_be        = pend_be_q;
 				arr_tag_in    = pend_tag_q;
 				arr_wdata     = pend_wdata_q;
@@ -1323,6 +1353,8 @@ module rv64g_l1_dcache #(
 			arr_way_sel   = pend_victim_q;
 			arr_write_en  = 1'b1;
 			arr_state_in  = MESI_TT;
+			arr_tag_write_en = 1'b1;
+			arr_tag_broadcast_en = 1'b1;
 			arr_be        = (pend_amo_word_q) ? 8'h0F : 8'hFF;
 			arr_tag_in    = pend_tag_q;
 			arr_wdata     = amo_new_value;

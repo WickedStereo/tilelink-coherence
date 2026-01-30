@@ -37,6 +37,7 @@ module rv64g_l1_banked_arrays #(
     input               scalar_req_i,
     input               scalar_we_i,
     input               scalar_tag_we_i,     // Broadcast tag/state write to ALL banks
+    input               scalar_tag_broadcast_i, // Broadcast tag/state to ALL banks
     input  [INDEX_W-1:0] scalar_index_i,
     input  [2:0]        scalar_word_i,       // Word within line (also bank select)
     input  [2:0]        scalar_way_i,
@@ -180,7 +181,8 @@ module rv64g_l1_banked_arrays #(
                 // Scalar port
                 .scalar_req_i   (scalar_bank_en[bk]),
                 .scalar_we_i    (scalar_we_i),
-                .scalar_tag_we_i(scalar_tag_we_i),  // Broadcast tag write
+                .scalar_tag_we_i(scalar_tag_we_i),
+                .scalar_tag_broadcast_i(scalar_tag_broadcast_i),
                 .scalar_index_i (scalar_index_i),
                 .scalar_word_i  (scalar_word_i),
                 .scalar_way_i   (scalar_way_i),
