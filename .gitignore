@@ -1,0 +1,43 @@
+# Build outputs
+*.o
+*.a
+*.so
+*.vvp
+obj_dir/
+sim_build/
+
+# Simulation outputs
+*.vcd
+*.fst
+*.lxt
+*.lxt2
+*.fsdb
+*.shm/
+*.vpd
+
+# Verilator
+*.log
+sim_l1_*
+sim_l2_*
+sim_system*
+
+# cocotb
+__pycache__/
+*.pyc
+results.xml
+sim.vvp
+
+# Model packaging
+tb/cocotb/model/bin/*.exe
+tb/cocotb/model/bin/*
+!tb/cocotb/model/bin/.gitkeep
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

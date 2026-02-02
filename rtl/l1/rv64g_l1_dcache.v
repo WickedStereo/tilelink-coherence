@@ -844,6 +844,7 @@ module rv64g_l1_dcache #(
 				end else begin
 					// Exclusive/Modified: Write directly
 					gnt_n    = 1'b1;      // accept write
+					rvalid_n = 1'b1;      // signal write completion
 						// Program array write for selected way/word
 					arr_word_sel  = word_off;
 					arr_way_sel   = hit_way;
@@ -1326,7 +1327,7 @@ module rv64g_l1_dcache #(
 				arr_tag_in    = pend_tag_q;
 				arr_wdata     = pend_wdata_q;
 				gnt_n         = 1'b1;   // complete the store
-				rvalid_n      = 1'b0;
+				rvalid_n      = 1'b1;   // signal write completion
 				state_n       = S_IDLE;
 			end else if (return_state_q == S_VLSU_REPLAY) begin
 				// VLSU refill completion - signal to miss handler
