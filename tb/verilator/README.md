@@ -55,29 +55,29 @@ Use the top-level Makefile targets:
 
 ```bash
 # L1 Tests
-make run_l1_sram_test
-make run_l1_banked_test
-make run_l1_hit_test
-make run_l1_miss_handler_test
-make run_l1_scalar_test
-make run_l1_probe_test
-make run_l1_vlsu_test
-make run_l1_all
+make sim_verilator_l1_sram
+make sim_verilator_l1_banked
+make sim_verilator_l1_hit
+make sim_verilator_l1_miss_handler
+make sim_verilator_l1_scalar
+make sim_verilator_l1_probe
+make sim_verilator_l1_vlsu
+make sim_verilator_l1_all
 
 # L2 Tests
-make run_l2_dir
-make run_l2_arrays
-make run_l2_mshr
-make run_l2_fsm
+make sim_verilator_l2_dir
+make sim_verilator_l2_arrays
+make sim_verilator_l2_mshr
+make sim_verilator_l2_fsm
 
 # Xbar Tests
-make run_xbar
-make run_demux
-make run_socket
+make sim_verilator_xbar
+make sim_verilator_demux
+make sim_verilator_socket
 
 # System Tests
-make run_system
-make run_system_stress
+make sim_verilator_system
+make sim_verilator_system_stress
 ```
 
 ## Note

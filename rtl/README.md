@@ -162,7 +162,7 @@ See `tb/` for testbenches:
 
 Run tests:
 ```bash
-make sim_cocotb_all   # All cocotb tests
-make run_l1_all       # All L1 Verilator tests
-make lint             # Lint all RTL
+make sim_cocotb_all           # All cocotb tests
+make sim_verilator_l1_all     # All L1 Verilator tests
+make lint                     # Lint all RTL
 ```

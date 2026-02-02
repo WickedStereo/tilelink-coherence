@@ -172,7 +172,7 @@ async def test_example(dut):
 
 ```bash
 # Verilator (automatic)
-make run_l1_scalar_test
+make sim_verilator_l1_scalar
 # VCD at: obj_dir/wave.vcd
 
 # Cocotb
@@ -204,7 +204,7 @@ Some Verilator tests use `TEST_SELECT` to choose specific test cases:
 
 ```bash
 # Run specific test case
-make run_l1_scalar_test  # TEST_SELECT=0 (default)
+make sim_verilator_l1_scalar  # TEST_SELECT=0 (default)
 ```
 
 ## 7. Debugging
@@ -247,5 +247,5 @@ pip install cocotb cocotb-test
 If `params.vh` not found, ensure you're running from the project root:
 ```bash
 cd /path/to/tilelink-coherence
-make run_l1_scalar_test
+make sim_verilator_l1_scalar
 ```
