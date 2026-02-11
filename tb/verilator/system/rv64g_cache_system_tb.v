@@ -277,7 +277,7 @@ module rv64g_cache_system_tb;
     // VCD Dump
     initial begin
         $dumpfile("obj_dir/wave_system.vcd");
-        $dumpvars(0, rv64g_system_tb);
+        $dumpvars(0, rv64g_cache_system_tb);
     end
 
 endmodule

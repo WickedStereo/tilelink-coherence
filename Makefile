@@ -150,7 +150,7 @@ sim_cocotb_all: sim_cocotb_l1 sim_cocotb_l2 sim_cocotb_coherence sim_cocotb_amo_
 # =============================================================================
 # Lint targets
 # =============================================================================
-lint: lint_l1 lint_l2_cocotb
+lint: lint_l1 lint_l2_cocotb lint_xbar lint_demux lint_socket
 
 lint_l1:
 	$(VERILATOR) --lint-only -Wall -Wno-fatal -I$(RTL_DIR) \
@@ -172,6 +172,10 @@ lint_l2_cocotb:
 clean:
 	rm -rf obj_dir obj_dir/wave.vcd $(COCOTB_DIR)/sim_build $(COCOTB_DIR)/sim_build_l2 $(COV_DIR)
 	rm -f *.vcd
+	find $(COCOTB_DIR) -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find $(COCOTB_DIR) -type f -name "*.pyc" -delete 2>/dev/null || true
+	find $(COCOTB_DIR) -type f -name "results.xml" -delete 2>/dev/null || true
+	find $(COCOTB_DIR) -type f -name "*.vcd" -delete 2>/dev/null || true
 
 clean_verilator:
 	rm -rf obj_dir obj_dir/wave.vcd

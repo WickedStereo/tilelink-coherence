@@ -27,7 +27,8 @@ module tl_arbiter_tb (
         .data_i(data_i),
         .valid_o(valid_o),
         .ready_i(ready_i),
-        .data_o(data_o)
+        .data_o(data_o),
+        .last_i(1'b1)  // All single-beat in this test
     );
 
     integer i;

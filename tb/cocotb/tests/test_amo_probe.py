@@ -770,13 +770,11 @@ async def test_lr_sc_probe_invalidates(dut):
         new_value = 0x1111222233334444
         success = await sc_operation(dut, test_addr, new_value, timeout_cycles=500)
         
-        # SC failure is expected here
-        # Note: Some implementations may not track this precisely,
-        # so we just verify the sequence completes without hanging
+        # SC failure is expected here — probe must invalidate the reservation
         if not success:
             logger.info("SC correctly failed after probe (reservation broken)")
         else:
-            logger.warning("SC succeeded after probe - implementation may not track reservation strictly")
+            raise AssertionError("SC succeeded after probe - reservation should have been invalidated")
         
         logger.info("LR/SC probe invalidates test PASSED")
         

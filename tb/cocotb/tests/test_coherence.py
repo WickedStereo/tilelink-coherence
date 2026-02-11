@@ -44,15 +44,32 @@ TL_D_GRANT = 4
 TL_D_GRANT_DATA = 5
 TL_D_RELEASE_ACK = 6
 
-# TileLink Permissions
-TL_PERM_NONE = 0       # toN - No permissions
-TL_PERM_BRANCH = 1     # toB - Read-only (Shared)
-TL_PERM_TRUNK = 2      # toT - Read/Write (Exclusive)
+# TileLink Grow Parameters (A-channel Acquire requests)
+#   NtoB=0: Request shared (Branch) from Nothing
+#   NtoT=1: Request exclusive (Trunk) from Nothing
+#   BtoT=2: Upgrade from shared to exclusive
+TL_GROW_NtoB = 0
+TL_GROW_NtoT = 1
+TL_GROW_BtoT = 2
 
-# Probe transitions
-PROBE_TO_N = 0  # Invalidate
+# TileLink Cap Parameters (D-channel Grant responses / B-channel Probe)
+#   In Cap encoding, LOWER values = MORE permission
+#   toT=0: Trunk (exclusive, read/write)
+#   toB=1: Branch (shared, read-only)
+#   toN=2: Nothing (no permission)
+TL_CAP_toT = 0
+TL_CAP_toB = 1
+TL_CAP_toN = 2
+
+# Legacy aliases (permission level ordering, higher = more)
+TL_PERM_NONE = 0
+TL_PERM_BRANCH = 1
+TL_PERM_TRUNK = 2
+
+# Probe Cap transitions (same encoding as Cap params)
+PROBE_TO_T = 0  # Keep exclusive (rare)
 PROBE_TO_B = 1  # Downgrade to shared
-PROBE_TO_T = 2  # Keep exclusive (rare)
+PROBE_TO_N = 2  # Invalidate
 
 # Cache states (MESI)
 MESI_N = 0   # Invalid
@@ -205,7 +222,7 @@ async def reset_dut(dut, cycles=10):
     logger.info("Reset complete")
 
 
-async def acquire_block(dut, address, source, param=TL_PERM_TRUNK, timeout=500):
+async def acquire_block(dut, address, source, param=TL_GROW_NtoT, timeout=500):
     """Send AcquireBlock and wait for Grant."""
     logger.info(f"Core {source}: AcquireBlock addr=0x{address:016x} param={param}")
     
@@ -354,11 +371,11 @@ async def test_exclusive_write(dut):
     
     try:
         # Core 0 acquires for write (requesting exclusive)
-        grants = await acquire_block(dut, test_addr, source=0, param=TL_PERM_TRUNK)
+        grants = await acquire_block(dut, test_addr, source=0, param=TL_GROW_NtoT)
         
-        # Should get at least shared permission (L2 may grant shared first)
-        # The actual permission depends on L2 implementation
-        assert grants[0]['param'] >= TL_PERM_BRANCH, "Should get at least shared permission"
+        # In Cap encoding (D-channel): toT=0, toB=1, toN=2 (lower = more permission)
+        # "At least shared" means param <= toB (1)
+        assert grants[0]['param'] <= TL_CAP_toB, "Should get at least shared permission (Cap: toT=0, toB=1)"
         logger.info(f"Core 0 got access (param={grants[0]['param']})")
         
         logger.info("Exclusive write test PASSED")

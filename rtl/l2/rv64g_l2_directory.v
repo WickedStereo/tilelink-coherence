@@ -91,9 +91,9 @@ module rv64g_l2_directory #(
     // The initial block is kept for simulation but reset_n provides runtime reset
     integer i;
     
-    always @(posedge clk) begin
+    always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            // Synchronous reset - invalidate all entries
+            // Asynchronous active-low reset - consistent with rest of design
             for (i = 0; i < SETS; i = i + 1) begin
                 ram[i] <= {(WAYS*ENTRY_W){1'b0}};
             end

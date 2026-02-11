@@ -104,7 +104,7 @@ module simple_ram #(
                             a_ready <= 0; // Busy
                         end else if (a_opcode == 3'd0) begin // PutFullData (Write)
                             // First beat write
-                            memory[(a_address >> 3) & (MEM_SIZE-1)] = a_data;
+                            memory[(a_address >> 3) & (MEM_SIZE-1)] <= a_data;
                             
                             burst_cnt <= 0;
                             burst_addr <= a_address;
@@ -118,7 +118,7 @@ module simple_ram #(
                 S_WRITE_BURST: begin
                     a_ready <= 1;
                     if (a_valid && a_ready) begin
-                        memory[((burst_addr >> 3) & (MEM_SIZE-1)) + burst_cnt + 1] = a_data;
+                        memory[((burst_addr >> 3) & (MEM_SIZE-1)) + burst_cnt + 1] <= a_data;
                         
                         if (burst_cnt == 6) begin // Last beat (7)
                             state <= S_IDLE;

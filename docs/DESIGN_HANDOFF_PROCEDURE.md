@@ -17,12 +17,13 @@ This document describes the procedure for handing off the TileLink Cache System 
 
 ### 2.2 Documentation Checklist
 
-- [ ] `README.md` - Project overview and quick start
-- [ ] `docs/INTERFACE.md` - Complete port specification
-- [ ] `docs/USAGE.md` - How to run tests
-- [ ] `docs/VERSIONS.md` - Tool requirements
-- [ ] `docs/architecture.md` - System architecture
-- [ ] `docs/DESIGN_HANDOFF_PROCEDURE.md` - This document
+- [x] `README.md` - Project overview and quick start
+- [x] `docs/INTERFACE.md` - Complete port specification
+- [x] `docs/USAGE.md` - How to run tests
+- [x] `docs/VERSIONS.md` - Tool requirements
+- [x] `docs/architecture.md` - System architecture
+- [x] `docs/DESIGN_HANDOFF_PROCEDURE.md` - This document
+- [x] `docs/REVIEW_FINDINGS.md` - RTL review findings and recommendations
 
 ## 3. Pre-Handoff Verification
 
@@ -103,8 +104,8 @@ Provide recipients with:
 
 ### 5.1 Contact Information
 
-- **Design Team**: design@example.com
-- **Issue Tracker**: https://github.com/example/tilelink-cache/issues
+- **Design Team**: Contact your project lead for design team information
+- **Issue Tracker**: File issues through the project's version control system
 
 ### 5.2 Known Limitations
 
@@ -118,3 +119,4 @@ Provide recipients with:
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2026-01-29 | Initial handoff with cocotb support |
+| 1.0.1 | 2026-02-11 | RTL review fixes — see `docs/REVIEW_FINDINGS.md` |

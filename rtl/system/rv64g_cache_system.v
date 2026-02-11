@@ -318,7 +318,7 @@ module rv64g_cache_system #(
         .mgr_b_valid_i(l2_b_valid),
         .mgr_b_ready_o(l2_b_ready),
         .mgr_b_opcode_i(l2_b_opcode),
-        .mgr_b_param_i({1'b0, l2_b_param}),
+        .mgr_b_param_i(l2_b_param),
         .mgr_b_size_i(l2_b_size),
         .mgr_b_source_i(l2_b_source),
         .mgr_b_address_i(l2_b_address),

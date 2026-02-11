@@ -536,7 +536,7 @@ wire [CID_W-1:0] c_core_id = c_source_i[SOURCE_W-1 -: CID_W];
                                     b_param_o = 3'd1; // TtoN (Invalidate) - FIXED (Was 3'd0 TtoB)
                                 end else begin // AcquireBlock
                                     b_opcode_o = 3'd6; // B_PROBE
-                                    b_param_o = 3'd1; // TtoN (Invalidate) - FIXED (Comment was "To B")
+                                    b_param_o = (req_param_q == 3'd0) ? 3'd0 : 3'd1; // NtoB->TtoB (downgrade), NtoT->TtoN (invalidate)
                                 end
                             end else begin
                                 // Eviction
@@ -679,7 +679,7 @@ wire [CID_W-1:0] c_core_id = c_source_i[SOURCE_W-1 -: CID_W];
                     
                     if (req_opcode_q == 3'd6) begin // AcquireBlock -> GrantData
                         d_opcode_o = 3'd5; 
-                        d_param_o = 2'd1; 
+                        d_param_o = (req_param_q == 3'd0) ? 2'd1 : 2'd0; // NtoB->toB, NtoT->toT 
                         
                         // Read Data
                         data_set_o = req_addr_q[13:6];
@@ -695,7 +695,7 @@ wire [CID_W-1:0] c_core_id = c_source_i[SOURCE_W-1 -: CID_W];
                         end
                     end else begin // AcquirePerm -> Grant
                         d_opcode_o = 3'd4; 
-                        d_param_o = 2'd2; 
+                        d_param_o = 2'd0; // toT (exclusive permission) 
                         d_data_o = 64'd0;
                         
                         if (d_ready_i) begin
@@ -740,10 +740,17 @@ wire [CID_W-1:0] c_core_id = c_source_i[SOURCE_W-1 -: CID_W];
                     // Acquire (Existing Logic)
                     if (req_opcode_q == 3'd6) begin // AcquireBlock
                         if (req_param_q == 3'd0) begin // NtoB (Read Shared)
-                            dir_wr_sharers_o = hit_sharers | (1 << req_core_id);
-                            dir_wr_owner_valid_o = hit_owner_valid;
-                            dir_wr_owner_id_o = hit_owner_id;
-                            dir_wr_dirty_o = hit_dirty;
+                            if (hit_owner_valid) begin
+                                // Owner was probed with TtoB (downgraded to shared)
+                                // Both old owner and requester become sharers
+                                dir_wr_sharers_o = (1 << req_core_id) | (1 << hit_owner_id);
+                            end else begin
+                                // No owner — add requester to existing sharers
+                                dir_wr_sharers_o = hit_sharers | (1 << req_core_id);
+                            end
+                            dir_wr_owner_valid_o = 1'b0;
+                            dir_wr_owner_id_o = {CID_W{1'b0}};
+                            dir_wr_dirty_o = 1'b0; // Data written back via ProbeAckData
                         end else begin // NtoT (Read Exclusive) or BtoT (Upgrade)
                             dir_wr_sharers_o = (1 << req_core_id); // Only requester
                             dir_wr_owner_valid_o = 1'b1;

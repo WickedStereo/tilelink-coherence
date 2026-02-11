@@ -15,14 +15,24 @@ module tl_arbiter #(
     // Output (1 sink)
     output reg                   valid_o,
     input  wire                  ready_i,
-    output reg  [DATA_W-1:0]     data_o
+    output reg  [DATA_W-1:0]     data_o,
+
+    // Burst lock: 1 = last (or only) beat, 0 = more beats follow
+    input  wire                  last_i
 );
 
     reg [N-1:0] mask;
     wire [N-1:0] masked_req = valid_i & mask;
     wire [N-1:0] raw_grant;
     wire [N-1:0] masked_grant;
-    reg [N-1:0] grant;
+    reg [N-1:0] arb_grant;
+
+    // Burst lock state
+    reg         locked_q;
+    reg [N-1:0] locked_grant_q;
+
+    // Effective grant: use locked grant during burst, arbitration result otherwise
+    wire [N-1:0] grant = locked_q ? locked_grant_q : arb_grant;
 
     // Priority arbiters (fixed priority)
     // Find first set bit
@@ -41,12 +51,12 @@ module tl_arbiter #(
         end
     endgenerate
 
-    // Final grant selection
+    // Final arbitration selection (before lock override)
     always @(*) begin
         if (|masked_req) begin
-            grant = masked_grant;
+            arb_grant = masked_grant;
         end else begin
-            grant = raw_grant;
+            arb_grant = raw_grant;
         end
     end
 
@@ -66,15 +76,26 @@ module tl_arbiter #(
         end
     end
 
-    // Rotate priority
+    // Rotate priority and burst lock tracking
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             mask <= {N{1'b1}};
+            locked_q <= 1'b0;
+            locked_grant_q <= {N{1'b0}};
         end else if (valid_o && ready_i) begin
-            // Rotate mask to start after the current grant
-            // If grant[k] is set, mask bits 0..k become 0, bits k+1..N-1 become 1.
-            // If grant[N-1] is set, mask becomes 0 (which wraps to raw_grant next cycle)
-            mask <= ~(grant | (grant - 1'b1));
+            if (last_i) begin
+                // Last beat (or single-beat): unlock and rotate priority
+                locked_q <= 1'b0;
+                if (locked_q)
+                    mask <= ~(locked_grant_q | (locked_grant_q - 1'b1));
+                else
+                    mask <= ~(arb_grant | (arb_grant - 1'b1));
+            end else if (!locked_q) begin
+                // First beat of multi-beat burst: lock to current winner
+                locked_q <= 1'b1;
+                locked_grant_q <= arb_grant;
+            end
+            // If locked_q && !last_i: stay locked, no mask change
         end
     end
 

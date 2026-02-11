@@ -128,6 +128,48 @@ module tl_socket_m1 #(
     localparam CID_W = (N_CLIENTS > 1) ? $clog2(N_CLIENTS) : 1;
 
     // ========================================================================
+    // Burst Tracking for Multi-Beat Message Protection
+    // ========================================================================
+    // TileLink multi-beat messages on Channel A: PutFullData (0), PutPartialData (1)
+    // TileLink multi-beat messages on Channel C: ProbeAckData (5), ReleaseData (7)
+    // For 64B cache lines on 8B bus: 8 beats per burst (size=6).
+    // Channel E is always single-beat.
+
+    // --- Channel A burst tracking ---
+    reg [2:0] a_beat_cnt;
+    wire      a_handshake = mgr_a_valid_o && mgr_a_ready_i;
+    wire      a_is_multi_beat = (mgr_a_opcode_o == 3'd0) || (mgr_a_opcode_o == 3'd1);
+    wire      a_last = !a_is_multi_beat || (a_beat_cnt == 3'd7);
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            a_beat_cnt <= 3'd0;
+        end else if (a_handshake) begin
+            if (a_last)
+                a_beat_cnt <= 3'd0;
+            else
+                a_beat_cnt <= a_beat_cnt + 3'd1;
+        end
+    end
+
+    // --- Channel C burst tracking ---
+    reg [2:0] c_beat_cnt;
+    wire      c_handshake = mgr_c_valid_o && mgr_c_ready_i;
+    wire      c_is_multi_beat = (mgr_c_opcode_o == 3'd5) || (mgr_c_opcode_o == 3'd7);
+    wire      c_last = !c_is_multi_beat || (c_beat_cnt == 3'd7);
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            c_beat_cnt <= 3'd0;
+        end else if (c_handshake) begin
+            if (c_last)
+                c_beat_cnt <= 3'd0;
+            else
+                c_beat_cnt <= c_beat_cnt + 3'd1;
+        end
+    end
+
+    // ========================================================================
     // Channel A: N -> 1 Arbiter
     // ========================================================================
     
@@ -167,7 +209,8 @@ module tl_socket_m1 #(
         .data_i(a_packed_i),
         .valid_o(mgr_a_valid_o),
         .ready_i(mgr_a_ready_i),
-        .data_o(a_packed_o)
+        .data_o(a_packed_o),
+        .last_i(a_last)
     );
 
     // Unpack A and Extend Source
@@ -226,7 +269,8 @@ module tl_socket_m1 #(
         .data_i(c_packed_i),
         .valid_o(mgr_c_valid_o),
         .ready_i(mgr_c_ready_i),
-        .data_o(c_packed_o)
+        .data_o(c_packed_o),
+        .last_i(c_last)
     );
 
     wire [CID_W-1:0] c_winner_id;
@@ -268,7 +312,8 @@ module tl_socket_m1 #(
         .data_i(cli_e_sink_i), // Flattened array matches
         .valid_o(mgr_e_valid_o),
         .ready_i(mgr_e_ready_i),
-        .data_o(mgr_e_sink_o)
+        .data_o(mgr_e_sink_o),
+        .last_i(1'b1)  // E channel is always single-beat
     );
 
 

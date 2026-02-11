@@ -207,6 +207,7 @@ module rv64g_cache_system_stress_tb;
                     .SINK_W(4),
                     .CHANNEL_NAME(m==0 ? "L1[0]" : m==1 ? "L1[1]" : m==2 ? "L1[2]" : "L1[3]")
                 ) l1_monitor (
+                    .clk(clk),
                     // Channel A (L1 -> Xbar requests)
                     .a_valid(dut.gen_l1[m].l1.tl_a_valid_o),
                     .a_ready(dut.gen_l1[m].l1.tl_a_ready_i),
@@ -328,6 +329,7 @@ module rv64g_cache_system_stress_tb;
                 .CHANNEL_NAME("L2"),
                 .IS_MANAGER(1)
             ) l2_monitor (
+                .clk(clk),
                 // Channel A (Xbar -> L2 requests)
                 .a_valid(l2_a_valid),
                 .a_ready(l2_a_ready),
@@ -390,6 +392,7 @@ module rv64g_cache_system_stress_tb;
         .CHANNEL_NAME("MEM"),
         .IS_MANAGER(1)
     ) mem_monitor (
+        .clk(clk),
         // Channel A (L2 -> Memory requests: Get, PutFullData)
         .a_valid(mem_a_valid),
         .a_ready(mem_a_ready),

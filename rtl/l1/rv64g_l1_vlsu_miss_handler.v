@@ -41,7 +41,7 @@ module rv64g_l1_vlsu_miss_handler #(
     // Status outputs
     output reg                     busy_o,            // Handler is processing misses
     output reg                     ready_for_replay_o,// All misses resolved, replay
-    output reg [3:0]               miss_count_o       // Number of unique misses
+    output wire [3:0]              miss_count_o       // Number of unique misses
 );
 
     // =========================================================================

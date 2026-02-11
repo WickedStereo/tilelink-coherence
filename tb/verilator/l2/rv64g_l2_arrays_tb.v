@@ -8,7 +8,8 @@ module rv64g_l2_arrays_tb (
     reg [7:0]   index_i;
     reg [2:0]   word_sel_i;
     reg [3:0]   way_sel_i;
-    reg         write_en_i;
+    reg         data_we_i;
+    reg         tag_we_i;
     reg [7:0]   be_i;
     reg [49:0]  tag_in_i;
     reg [63:0]  wdata_i;
@@ -24,7 +25,8 @@ module rv64g_l2_arrays_tb (
         .index_i(index_i),
         .word_sel_i(word_sel_i),
         .way_sel_i(way_sel_i),
-        .write_en_i(write_en_i),
+        .data_we_i(data_we_i),
+        .tag_we_i(tag_we_i),
         .be_i(be_i),
         .tag_in_i(tag_in_i),
         .wdata_i(wdata_i),
@@ -40,7 +42,8 @@ module rv64g_l2_arrays_tb (
         index_i = 0;
         word_sel_i = 0;
         way_sel_i = 0;
-        write_en_i = 0;
+        data_we_i = 0;
+        tag_we_i = 0;
         be_i = 0;
         tag_in_i = 0;
         wdata_i = 0;
@@ -50,7 +53,8 @@ module rv64g_l2_arrays_tb (
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             cycle <= 0;
-            write_en_i <= 0;
+            data_we_i <= 0;
+            tag_we_i <= 0;
         end else begin
             cycle <= cycle + 1;
 
@@ -60,13 +64,15 @@ module rv64g_l2_arrays_tb (
                     index_i <= 8'h10;
                     word_sel_i <= 3'd2;
                     way_sel_i <= 4'd5;
-                    write_en_i <= 1;
+                    data_we_i <= 1;
+                    tag_we_i <= 1;
                     be_i <= 8'hFF;
                     tag_in_i <= 50'h123456789ABC;
                     wdata_i <= 64'hDEADBEEFCAFEBABE;
                 end
                 11: begin
-                    write_en_i <= 0;
+                    data_we_i <= 0;
+                    tag_we_i <= 0;
                     // Read back
                     index_i <= 8'h10;
                     word_sel_i <= 3'd2;
@@ -90,13 +96,14 @@ module rv64g_l2_arrays_tb (
                     index_i <= 8'h10;
                     word_sel_i <= 3'd2;
                     way_sel_i <= 4'd5;
-                    write_en_i <= 1;
+                    data_we_i <= 1;
+                    tag_we_i <= 0;
                     be_i <= 8'h0F; // Lower 32 bits
                     wdata_i <= 64'h0000000011111111; // Should only overwrite lower half
                     // Upper half was CAFEBABE
                 end
                 21: begin
-                    write_en_i <= 0;
+                    data_we_i <= 0;
                 end
                 22: begin
                     if (rdata_selected_o == 64'hDEADBEEF11111111)

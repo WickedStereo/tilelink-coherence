@@ -427,9 +427,9 @@ module rv64g_l1_dcache #(
 	// Combinational array index selection
 	wire [INDEX_W-1:0] binv_index_w = tl_b_address_i[INDEX_W+LINE_OFF_W-1 : LINE_OFF_W];
 	wire [INDEX_W-1:0] arr_index_w =
-		((state == S_WB_REQ) || (state == S_WB_DATA) || (state == S_WB_WAIT) || (state == S_REF_WAIT) || (state == S_RESP) || (state == S_AMO_WRITE)) ? pend_index_q :
+		((state == S_WB_REQ) || (state == S_WB_DATA) || (state == S_WB_WAIT) || (state == S_REF_WAIT) || (state == S_RESP) || (state == S_AMO_WRITE) || (state == S_VLSU_MISS) || (state == S_VLSU_REPLAY)) ? pend_index_q :
         ((state == S_PROBE_RESP)) ? probe_pend_index_q :
-		((state == S_IDLE) && tl_b_valid_i ? binv_index_w : index);				// S_REF_WAIT not required?
+		((state == S_IDLE) && tl_b_valid_i ? binv_index_w : index);
 
 	// Hit detection (combinational)
 	reg hit;
@@ -1472,7 +1472,7 @@ module rv64g_l1_dcache #(
 			amo_old_value_q <= 64'd0;
 			// LR/SC registers
 			resv_valid_q <= 1'b0;
-			resv_addr_q <= 52'd0;
+			resv_addr_q <= {58{1'b0}};
 			resv_word_q <= 1'b0;
 			pend_is_lr_q <= 1'b0;
 			pend_is_sc_q <= 1'b0;

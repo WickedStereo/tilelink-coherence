@@ -11,6 +11,7 @@ module tl_monitor #(
     parameter CHANNEL_NAME = "TL",
     parameter IS_MANAGER = 0  // Set to 1 if monitoring a Manager (Slave) interface (e.g. L2, MEM)
 ) (
+    input wire clk,
     // Channel A (Request)
     input wire a_valid,
     input wire a_ready,
@@ -144,7 +145,7 @@ module tl_monitor #(
     reg [2:0] a_beat_cnt;
     reg       a_in_burst;
     
-    always @(posedge a_valid) begin
+    always @(posedge clk) begin
         if (a_valid && a_ready) begin
             // Detect if this opcode carries data
             if (a_opcode == 3'd0 || a_opcode == 3'd1) begin // PutFull/Partial
@@ -175,7 +176,7 @@ module tl_monitor #(
     // ------------------------------------------------------------------------
     // Channel B Monitor (Probes)
     // ------------------------------------------------------------------------
-    always @(posedge b_valid) begin
+    always @(posedge clk) begin
         if (b_valid && b_ready) begin
             $display("[%0d cycles] %s %s B: %s @ 0x%h (Src:%0d Param:%s)", 
                      $time/10, CHANNEL_NAME, IS_MANAGER ? "->" : "<-", decode_b_opcode(b_opcode), b_address, b_source, decode_shrink_param(b_param));
@@ -188,7 +189,7 @@ module tl_monitor #(
     reg [2:0] c_beat_cnt;
     reg       c_in_burst;
 
-    always @(posedge c_valid) begin
+    always @(posedge clk) begin
         if (c_valid && c_ready) begin
             if (c_opcode == 3'd1 || c_opcode == 3'd5 || c_opcode == 3'd7) begin // AccessAckData, ProbeAckData, ReleaseData
                 if (!c_in_burst) begin
@@ -218,7 +219,7 @@ module tl_monitor #(
     reg [2:0] d_beat_cnt;
     reg       d_in_burst;
 
-    always @(posedge d_valid) begin
+    always @(posedge clk) begin
         if (d_valid && d_ready) begin
             if (d_opcode == 3'd1 || d_opcode == 3'd5) begin // AccessAckData or GrantData
                 if (!d_in_burst) begin
@@ -245,7 +246,7 @@ module tl_monitor #(
     // ------------------------------------------------------------------------
     // Channel E Monitor (GrantAck)
     // ------------------------------------------------------------------------
-    always @(posedge e_valid) begin
+    always @(posedge clk) begin
         if (e_valid && e_ready) begin
             $display("[%0d cycles] %s %s E: GrantAck (Snk:%0d)", $time/10, CHANNEL_NAME, IS_MANAGER ? "<-" : "->", e_sink);
         end
