@@ -111,8 +111,10 @@ Provide recipients with:
 
 | Limitation | Description | Workaround |
 |------------|-------------|------------|
+| Single MSHR | L2 processes one miss at a time (blocking) | Future multi-entry MSHR |
 | VLSU Ordering | VLSU does not guarantee memory ordering | Use fences |
 | Probe Timing | Probe during refill adds latency | Expected behavior |
+| Stress Test | `sim_verilator_system_stress` uses hierarchical refs incompatible with Verilator | Use VCS/Questa or refactor `stimulus.v` |
 
 ## 6. Change Log
 

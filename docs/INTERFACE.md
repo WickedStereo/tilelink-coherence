@@ -190,6 +190,30 @@ rdata                                |  DATA   |________
 | 3'd5 | GrantData | Grant with data |
 | 3'd6 | ReleaseAck | Ack for Release |
 
+#### D Channel `param` Encoding (Cap — lower value = more permission)
+
+| Value | Name | Description |
+|-------|------|-------------|
+| 0 | toT | Trunk — exclusive read/write permission |
+| 1 | toB | Branch — shared read-only permission |
+| 2 | toN | Nothing — no permission |
+
+#### A Channel `param` Encoding (Grow — permission upgrade requests)
+
+| Value | Name | Description |
+|-------|------|-------------|
+| 0 | NtoB | Request shared (Branch) from Nothing |
+| 1 | NtoT | Request exclusive (Trunk) from Nothing |
+| 2 | BtoT | Upgrade from shared to exclusive |
+
+#### B Channel `param` Encoding (Cap — target permission after probe)
+
+| Value | Name | Description |
+|-------|------|-------------|
+| 0 | toT | Keep exclusive (no downgrade) |
+| 1 | toB | Downgrade to shared |
+| 2 | toN | Invalidate (release all permission) |
+
 ### 2.11 TileLink Channel E (GrantAck)
 
 | Signal | Dir | Width | Description |
@@ -234,3 +258,39 @@ rdata                                |  DATA   |________
 | Shared | B | Branch | Read-only, clean |
 | Exclusive | T | Trunk | Read/Write, clean |
 | Modified | TT | Trunk | Read/Write, dirty |
+
+## 5. TileLink Crossbar Components
+
+### 5.1 Arbiter (`tl_arbiter`)
+
+#### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `N` | 4 | Number of clients |
+| `DATA_W` | 100 | Packed data width |
+
+#### Ports
+
+| Signal | Dir | Width | Description |
+|--------|-----|-------|-------------|
+| `clk` | in | 1 | Clock |
+| `rst_n` | in | 1 | Active-low reset |
+| `valid_i` | in | N | Per-client valid |
+| `ready_o` | out | N | Per-client ready |
+| `data_i` | in | N×DATA_W | Packed client data |
+| `valid_o` | out | 1 | Output valid |
+| `ready_i` | in | 1 | Output ready |
+| `data_o` | out | DATA_W | Selected client data |
+| `last_i` | in | 1 | Last beat flag (1=last/single, 0=more beats) |
+
+#### Burst Lock Behavior
+
+The arbiter uses `last_i` to implement burst locking for multi-beat TileLink messages:
+- When a handshake occurs with `last_i=0`, the arbiter locks its grant, holding the same client selected for subsequent beats.
+- When `last_i=1`, the burst ends: the lock releases and the round-robin mask rotates.
+- This prevents interleaving of beats from different clients in multi-beat transfers (e.g., PutFullData, ReleaseData, ProbeAckData).
+
+### 5.2 Socket M:1 (`tl_socket_m1`)
+
+The M:1 socket instantiates three arbiters (Channel A, Channel C, Channel E) and a demux (Channels B and D). It includes beat counters for A-channel (`PutFullData`/`PutPartialData`) and C-channel (`ProbeAckData`/`ReleaseData`) to drive the `last_i` signal.

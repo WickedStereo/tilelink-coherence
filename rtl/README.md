@@ -93,9 +93,9 @@ rtl/
 
 | Module | Description |
 |--------|-------------|
-| `tl_socket_m1.v` | M:1 socket (multiple masters, one slave) |
-| `tl_arbiter.v` | Round-robin request arbitration |
-| `tl_demux.v` | Response demultiplexing |
+| `tl_socket_m1.v` | M:1 socket with beat tracking for multi-beat messages |
+| `tl_arbiter.v` | Round-robin arbiter with burst lock (`last_i`) |
+| `tl_demux.v` | Response demultiplexing by source ID |
 
 ## TileLink Protocol
 

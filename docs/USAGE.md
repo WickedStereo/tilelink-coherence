@@ -24,9 +24,14 @@ make sim_verilator_l1_all
 # Run L1 cocotb smoke test
 make sim_cocotb_l1
 
-# Run full system stress test
-make sim_verilator_system_stress
+# Run full system test
+make sim_verilator_system
+
+# Run all cocotb tests
+make sim_cocotb_all
 ```
+
+> **Note**: `sim_verilator_system_stress` requires a commercial simulator (VCS/Questa) due to Verilator's inability to resolve hierarchical references through generate blocks in `stimulus.v`.
 
 ## 2. Directory Structure
 

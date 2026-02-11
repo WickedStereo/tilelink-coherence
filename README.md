@@ -85,10 +85,21 @@ docs/                   # Documentation
 |--------|-------------|
 | `sim_verilator_l1_sram` | L1 SRAM bank test |
 | `sim_verilator_l1_banked` | L1 banked arrays test |
+| `sim_verilator_l1_hit` | L1 hit detection test |
+| `sim_verilator_l1_miss_handler` | L1 miss handler test |
 | `sim_verilator_l1_scalar` | L1 scalar operations |
 | `sim_verilator_l1_probe` | L1 probe handling |
+| `sim_verilator_l1_vlsu` | L1 VLSU integration |
+| `sim_verilator_l1_vlsu_gating` | L1 VLSU miss gating |
 | `sim_verilator_l1_all` | All L1 Verilator tests |
-| `sim_verilator_system_stress` | Full system stress test |
+| `sim_verilator_l2_dir` | L2 directory test |
+| `sim_verilator_l2_arrays` | L2 arrays test |
+| `sim_verilator_l2_mshr` | L2 MSHR test |
+| `sim_verilator_l2_fsm` | L2 FSM test |
+| `sim_verilator_xbar` | Crossbar arbiter test |
+| `sim_verilator_demux` | Demux test |
+| `sim_verilator_socket` | Socket test |
+| `sim_verilator_system` | System integration test |
 
 ### Cocotb Tests
 
